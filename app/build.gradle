@@ -1,0 +1,69 @@
+apply plugin: "com.android.application"
+
+def releaseStoreFilePath = providers.gradleProperty("RELEASE_STORE_FILE").orNull
+def releaseStorePasswordValue = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+def releaseKeyAliasValue = providers.gradleProperty("RELEASE_KEY_ALIAS").orNull
+def releaseKeyPasswordValue = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+def releaseSigningConfigured = [
+        releaseStoreFilePath,
+        releaseStorePasswordValue,
+        releaseKeyAliasValue,
+        releaseKeyPasswordValue
+].every { it != null && !it.toString().trim().isEmpty() }
+
+android {
+    namespace = "com.lokey0905.pikminfixhca13"
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "com.lokey0905.pikminfixhca13"
+        minSdk = 28
+        targetSdk = 33
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    if (releaseSigningConfigured) {
+        signingConfigs {
+            create("releaseLocal") {
+                storeFile = file(releaseStoreFilePath)
+                storePassword = releaseStorePasswordValue
+                keyAlias = releaseKeyAliasValue
+                keyPassword = releaseKeyPasswordValue
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            minifyEnabled = false
+        }
+        getByName("release") {
+            minifyEnabled = false
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("releaseLocal")
+            }
+            proguardFiles(
+                    getDefaultProguardFile("proguard-android-optimize.txt"),
+                    "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds = false
+    }
+}
+
+dependencies {
+    compileOnly(files("libs/xposed-api-stubs.jar"))
+}
+
+configurations.configureEach {
+    exclude(group: "org.jetbrains.kotlin", module: "kotlin-stdlib")
+}

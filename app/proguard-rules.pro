@@ -1,0 +1,1 @@
+-keep class com.lokey0905.pikminfixhca13.PikminHealthConnectHook { *; }
