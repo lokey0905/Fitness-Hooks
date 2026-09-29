@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Pikmin Health Connect Fix</string>
-    <string name="app_desc">皮克敏工程師睡著了，幫她啟用原本的功能</string>
+    <string name="app_name">Fitness Hooks</string>
+    <string name="app_desc">Health Connect Fix 與手機測量步數覆寫</string>
+    <string name="settings_title">Fitness Hooks</string>
+    <string name="settings_subtitle">Make by lokey0905</string>
+    <string name="module_inactive_title">LSPosed 模組尚未啟用</string>
+    <string name="module_inactive_summary">請在 LSPosed 啟用 Fitness Hooks，並將 Fitness Hooks 與目標 App 加入作用域，再強制停止並重新開啟本程式。</string>
+    <string name="sdk_hook">Android 14 SDK 相容模式</string>
+    <string name="sdk_hook_summary">僅用於 Android 13 以下的 Health Connect 相容處理</string>
+    <string name="sdk_hook_unavailable">Android 14 以上無須啟用</string>
+    <string name="step_hook">覆寫手機測量步數</string>
+    <string name="step_hook_summary">套用至 Recording API on mobile 查詢結果</string>
+    <string name="step_count">目前時段回傳步數</string>
+    <string name="step_unit">步</string>
+    <string name="quick_add">➕ 增加步數</string>
+    <string name="quick_subtract">➖ 回退步數</string>
+    <string name="step_add_format">+%1$d</string>
+    <string name="step_subtract_format">-%1$d</string>
+    <string name="save">儲存設定</string>
+    <string name="saved">設定已儲存並同步至目標 App</string>
+    <string name="save_failed">設定儲存失敗</string>
+    <string name="invalid_step_count">步數必須介於 0 到 1000000</string>
 </resources>

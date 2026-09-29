@@ -1,36 +1,61 @@
-# Pikmin Fix HC A13
+# Fitness Hooks V2
 
-An LSPosed compatibility module for Pikmin Bloom 153.0 on Android 13. It bypasses only Pikmin's Android 14 operating-system gates while preserving the real `Build.VERSION.SDK_INT`, allowing AndroidX Health Connect to select the Android 13 APK provider.
+An LSPosed module for Pikmin Bloom 153.0 with two independent hooks:
 
-Package: `com.lokey0905.pikminfixhca13`
+- Android 13 Health Connect SDK-gate compatibility.
+- Recording API on mobile step-result override.
 
-## Behavior
+Package: `com.lokey0905.FitnessHooks`
 
-The module is scoped to `com.nianticlabs.pikmin` and installs two hooks only when the real SDK level is below 34:
+## Hooks
 
-- `FitnessClientHealthConnect.isSupported()` returns `true`.
-- `FitnessManager.osSupportsHealthConnect()` returns `true`.
+### SDK gate
 
-On Android 14 and later, no hook is installed. The module does not alter `Build.VERSION.SDK_INT`, force Google Fit, grant permissions, or replace Health Connect's provider selection.
+On Android 13 and lower, the SDK hook can override:
+
+- `FitnessClientHealthConnect.isSupported()`
+- `FitnessManager.osSupportsHealthConnect()`
+
+It preserves the real `Build.VERSION.SDK_INT`, allowing AndroidX Health Connect to retain its Android 13 provider selection. The SDK hook is not installed on Android 14 or later.
+
+### Recording steps
+
+The step hook targets:
+
+```text
+FitnessClientRecordingApi.queryStepCounts(int hours, int startTimeSec)
+```
+
+When enabled, it returns an `HourlyStepCountCollectionProto` before Pikmin starts the original Google Play services query. The result contains one current-hour bucket with the configured step count and its source remains `RECORDING_API_ON_MOBILE`. It does not write into Google Play services or Health Connect.
+
+Hook settings are delivered to an in-process receiver and persisted in Pikmin's own private storage. A startup request and settings-screen broadcasts keep the target-side copy synchronized without cross-package provider reads. The configuration broadcast is protected by a signature permission, and Android keeps each user's target-side settings separate.
+
+The setting controls the bucket total, not a guaranteed increment on every query. Unity and server-side reconciliation remain outside this module's static verification boundary.
 
 ## Requirements
 
-- Android 13 with the standalone Health Connect provider installed
 - LSPosed or a compatible Xposed framework
 - Pikmin Bloom 153.0
-- Health Connect permissions granted to Pikmin Bloom
+- For the SDK hook: Android 13 with the standalone Health Connect provider and permissions
+- For the step hook: Pikmin must select `RECORDING_API_ON_MOBILE`
 
 ## Installation
 
 1. Install the module APK.
-2. Enable it in LSPosed.
-3. Scope the module to Pikmin Bloom only.
-4. Force-stop and restart Pikmin Bloom.
+2. Open the module app and configure the two hooks.
+3. Enable it in LSPosed.
+4. Add both Fitness Hooks and Pikmin Bloom to the LSPosed scope.
+5. Force-stop and restart both apps.
+
+The Material 3 settings screen provides quick `+/- 1`, `10`, `100`, `500`, `1000`, and `5000` adjustments. It displays an activation warning when the module app process is not injected by LSPosed. On Android 14 and later, the Android 13 SDK compatibility option is disabled and always synchronized as off.
 
 The expected LSPosed log includes:
 
 ```text
-PikminFixHCA13: target loaded; sdk=33; hooks=2
+FitnessHooks: target loaded; configBridgeHooks=1; sdkHooks=2; stepHooks=1
+FitnessHooks: target config received; saved=true; sdk=true; steps=true; count=6000
+FitnessHooks: config loaded from target storage; sdk=true; steps=true; count=6000
+FitnessHooks: Recording step override active; steps=6000
 ```
 
 ## Building
@@ -61,8 +86,10 @@ The local `app/libs/xposed-api-stubs.jar` dependency is `compileOnly` and is not
 ## Compatibility Notes
 
 - The hook targets names and signatures observed in Pikmin Bloom 153.0. Later releases may rename or remove them.
-- A successful hook does not prove that the Health Connect provider is installed, available, or authorized.
-- Changing the package name means this build does not upgrade the older `com.lokey.pikminhca13` module. Disable or uninstall the old module before enabling this one to avoid duplicate hooks.
+- A successful SDK hook does not prove that the Health Connect provider is installed, available, or authorized.
+- A successful step hook proves only that Pikmin received the replacement protobuf; it does not prove server acceptance or the awarded delta.
+- Settings are per Android user. Configure the module in the same user/profile that runs Pikmin.
+- Changing the package name means this build does not upgrade older `com.lokey.pikminhca13` or `com.lokey0905.pikminfixhca13` builds. Disable or uninstall the old module before enabling this one to avoid duplicate hooks.
 - This repository documents static analysis and build verification only; it does not claim real-device validation.
 
 See [docs/STATIC_ANALYSIS.md](docs/STATIC_ANALYSIS.md) for the evidence boundary and hook rationale.

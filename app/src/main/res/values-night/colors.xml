@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pikmin_primary">#9BD49F</color>
+    <color name="pikmin_on_primary">#003914</color>
+    <color name="pikmin_primary_container">#1D5128</color>
+    <color name="pikmin_on_primary_container">#B7F1BA</color>
+    <color name="pikmin_secondary">#B9CCB4</color>
+    <color name="pikmin_on_secondary">#253423</color>
+    <color name="pikmin_secondary_container">#3B4B38</color>
+    <color name="pikmin_on_secondary_container">#D5E8CF</color>
+    <color name="pikmin_tertiary">#D7C581</color>
+    <color name="pikmin_on_tertiary">#3A3005</color>
+    <color name="pikmin_tertiary_container">#524719</color>
+    <color name="pikmin_on_tertiary_container">#F4E19A</color>
+    <color name="pikmin_surface">#111411</color>
+    <color name="pikmin_on_surface">#E1E3DE</color>
+    <color name="pikmin_surface_variant">#424940</color>
+    <color name="pikmin_on_surface_variant">#C2C9BE</color>
+    <color name="pikmin_outline">#8C9389</color>
+</resources>
