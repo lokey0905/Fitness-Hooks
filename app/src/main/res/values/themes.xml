@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FitnessHooks" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/pikmin_primary</item>
+        <item name="colorOnPrimary">@color/pikmin_on_primary</item>
+        <item name="colorPrimaryContainer">@color/pikmin_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/pikmin_on_primary_container</item>
+        <item name="colorSecondary">@color/pikmin_secondary</item>
+        <item name="colorOnSecondary">@color/pikmin_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/pikmin_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/pikmin_on_secondary_container</item>
+        <item name="colorTertiary">@color/pikmin_tertiary</item>
+        <item name="colorOnTertiary">@color/pikmin_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/pikmin_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/pikmin_on_tertiary_container</item>
+        <item name="colorSurface">@color/pikmin_surface</item>
+        <item name="colorOnSurface">@color/pikmin_on_surface</item>
+        <item name="colorSurfaceVariant">@color/pikmin_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/pikmin_on_surface_variant</item>
+        <item name="colorOutline">@color/pikmin_outline</item>
+        <item name="android:windowBackground">@color/pikmin_surface</item>
+        <item name="android:navigationBarColor">@color/pikmin_surface</item>
+        <item name="android:statusBarColor">@color/pikmin_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pikmin_primary">#356A3E</color>
+    <color name="pikmin_on_primary">#FFFFFF</color>
+    <color name="pikmin_primary_container">#B7F1BA</color>
+    <color name="pikmin_on_primary_container">#002109</color>
+    <color name="pikmin_secondary">#52634F</color>
+    <color name="pikmin_on_secondary">#FFFFFF</color>
+    <color name="pikmin_secondary_container">#D5E8CF</color>
+    <color name="pikmin_on_secondary_container">#101F10</color>
+    <color name="pikmin_tertiary">#6B5D2F</color>
+    <color name="pikmin_on_tertiary">#FFFFFF</color>
+    <color name="pikmin_tertiary_container">#F4E19A</color>
+    <color name="pikmin_on_tertiary_container">#231B00</color>
+    <color name="pikmin_surface">#F8FAF4</color>
+    <color name="pikmin_on_surface">#191C19</color>
+    <color name="pikmin_surface_variant">#DEE5DA</color>
+    <color name="pikmin_on_surface_variant">#424940</color>
+    <color name="pikmin_outline">#727970</color>
+    <color name="ic_launcher_background">#356A3E</color>
+</resources>
