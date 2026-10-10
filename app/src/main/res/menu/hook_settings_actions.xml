@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_about"
+        android:icon="@drawable/ic_info_outline"
+        android:title="@string/about_title"
+        app:contentDescription="@string/about_title"
+        app:iconTint="?attr/colorOnSurface"
+        app:showAsAction="always"
+        app:tooltipText="@string/about_title" />
+</menu>

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.2.0 - 2026-10-11
+
+- Set versionCode to 4 and show `fitness hook` plus the build version in the toolbar.
+- Added a top-right About dialog with the app icon, build version, author, and project disclaimer.
+- Added an automatic startup check of the public Fitness-Hooks GitHub Releases, with numeric version comparison, lifecycle-aware prompts, and an explicit link to the release page; no automatic downloads or installs.
+- Moved SDK compatibility above the mode selector and matched Health Connect actions to the settings-row style.
+- Added an over-50,000-step warning and confirmation, with seedling-specific daily-limit and time-zone caveats.
+- Added mutually exclusive Recording API and Health Connect modes with source-selection reminders.
+- Made Health Connect the leftmost mode and the default for users without a saved mode; preserved explicit choices.
+- Restored the SDK compatibility setting's default to on for supported pre-Android-14 environments, retaining availability checks and an off fallback for missing target configuration.
+- Distinguished managed work profiles from OEM clone spaces, deferring other profile availability to the Health Connect SDK without bypassing its restrictions.
+- Added explicit, permission-gated Health Connect writes for the current local hour's manual steps.
+- Added a current-hour label, explanatory text, separate mode values, and hour rollover handling.
+- Deduplicate repeated writes by hourly client ID and persistent revision; zero clears this app's current-hour records.
+- Check provider availability and profile support, and offer download/update on Android 13 and below.
+- Added a Health Connect permission rationale screen and focused interval/revision tests.
+- Passed 73 automated tests; the maintainer reports no issues in their current physical-device test, without claiming a complete device/OS/profile compatibility matrix.
+
 ## 2.1.0 - 2026-09-29
 
 - Rebuilt the settings screen with Material 3 components, day/night colors, and dynamic color support.

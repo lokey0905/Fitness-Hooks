@@ -9,6 +9,12 @@ final class HookConfig {
     static final String KEY_SDK_HOOK_ENABLED = "sdk_hook_enabled";
     static final String KEY_STEP_HOOK_ENABLED = "step_hook_enabled";
     static final String KEY_STEP_COUNT = "step_count";
+    static final String KEY_STEP_MODE = "step_mode";
+    static final String MODE_RECORDING = "recording";
+    static final String MODE_HEALTH_CONNECT = "health_connect";
+    static final String DEFAULT_STEP_MODE = MODE_HEALTH_CONNECT;
+    static final String KEY_HEALTH_STEP_COUNT = "health_step_count";
+    static final String KEY_HEALTH_STEP_HOUR = "health_step_hour";
     static final boolean DEFAULT_SDK_HOOK_ENABLED = true;
     static final boolean DEFAULT_STEP_HOOK_ENABLED = false;
     static final int DEFAULT_STEP_COUNT = 1000;
@@ -76,7 +82,7 @@ final class HookConfig {
 
     private static Snapshot defaults() {
         return new Snapshot(
-                DEFAULT_SDK_HOOK_ENABLED,
+                false,
                 DEFAULT_STEP_HOOK_ENABLED,
                 DEFAULT_STEP_COUNT
         );
