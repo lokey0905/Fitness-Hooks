@@ -17,18 +17,31 @@ final class ConfigTransport {
     }
 
     static HookConfig.Snapshot readModuleSettings(Context context) {
-        return readPreferences(context.getSharedPreferences(HookConfig.PREFS_NAME, 0));
+        SharedPreferences preferences = context.getSharedPreferences(HookConfig.PREFS_NAME, 0);
+        HookConfig.Snapshot snapshot = readPreferences(preferences, HookConfig.DEFAULT_SDK_HOOK_ENABLED);
+        boolean healthMode = HookConfig.MODE_HEALTH_CONNECT.equals(preferences.getString(
+                HookConfig.KEY_STEP_MODE, HookConfig.DEFAULT_STEP_MODE
+        ));
+        boolean sdkEnabled = snapshot.sdkHookEnabled;
+        if (sdkEnabled) {
+            sdkEnabled = HealthConnectSteps.availability(context)
+                    == HealthConnectSteps.Availability.AVAILABLE;
+        }
+        return new HookConfig.Snapshot(
+                sdkEnabled, !healthMode && snapshot.stepHookEnabled, snapshot.stepCount
+        );
     }
 
     static HookConfig.Snapshot readTargetSettings(Context context) {
-        return readPreferences(context.getSharedPreferences(TARGET_PREFS_NAME, 0));
+        // The target stays off until it receives settings validated by the module.
+        return readPreferences(context.getSharedPreferences(TARGET_PREFS_NAME, 0), false);
     }
 
     static boolean storeTargetSettings(Context context, Intent intent) {
         boolean sdkEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
                 && intent.getBooleanExtra(
                         HookConfig.KEY_SDK_HOOK_ENABLED,
-                        HookConfig.DEFAULT_SDK_HOOK_ENABLED
+                        false
                 );
         boolean stepEnabled = intent.getBooleanExtra(
                 HookConfig.KEY_STEP_HOOK_ENABLED,
@@ -55,12 +68,13 @@ final class ConfigTransport {
         context.sendBroadcast(intent);
     }
 
-    private static HookConfig.Snapshot readPreferences(SharedPreferences preferences) {
+    private static HookConfig.Snapshot readPreferences(
+            SharedPreferences preferences, boolean defaultSdkHookEnabled) {
         return new HookConfig.Snapshot(
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
                         && preferences.getBoolean(
                                 HookConfig.KEY_SDK_HOOK_ENABLED,
-                                HookConfig.DEFAULT_SDK_HOOK_ENABLED
+                                defaultSdkHookEnabled
                         ),
                 preferences.getBoolean(
                         HookConfig.KEY_STEP_HOOK_ENABLED,

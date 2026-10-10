@@ -7,9 +7,12 @@
         android:protectionLevel="signature" />
 
     <uses-permission android:name="com.lokey0905.FitnessHooks.permission.CONFIGURE" />
+    <uses-permission android:name="android.permission.health.WRITE_STEPS" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
         <package android:name="com.nianticlabs.pikmin" />
+        <package android:name="com.google.android.apps.healthdata" />
     </queries>
 
     <application
@@ -31,6 +34,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".HealthPermissionsActivity"
+            android:exported="true"
+            android:theme="@style/Theme.FitnessHooks">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".HealthPermissionUsage"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".HealthPermissionsActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
 
         <receiver
             android:name=".ConfigRequestReceiver"

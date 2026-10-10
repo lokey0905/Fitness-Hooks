@@ -1,5 +1,7 @@
 .gradle/
+.kotlin/
 .idea/
+.serena/
 **/build/
 local.properties
 *.iml
