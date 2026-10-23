@@ -99,8 +99,8 @@ public final class HookSettingsActivityTest {
 
         MaterialToolbar toolbar = activity.findViewById(R.id.toolbar);
         assertEquals("fitness hook " + BuildConfig.VERSION_NAME, toolbar.getTitle().toString());
-        assertEquals("2.2.0", BuildConfig.VERSION_NAME);
-        assertEquals(4, BuildConfig.VERSION_CODE);
+        assertEquals("2.2.1", BuildConfig.VERSION_NAME);
+        assertEquals(6, BuildConfig.VERSION_CODE);
         assertTrue(toolbar.getMenu().findItem(R.id.action_about).isVisible());
         Drawable aboutIcon = toolbar.getMenu().findItem(R.id.action_about).getIcon();
         assertNotNull(aboutIcon);

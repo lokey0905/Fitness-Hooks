@@ -1,4 +1,4 @@
-# Fitness Hooks 2.2.0
+# Fitness Hooks 2.2.1
 
 An LSPosed module for Pikmin Bloom 153.0 with two independent hooks:
 
@@ -7,7 +7,7 @@ An LSPosed module for Pikmin Bloom 153.0 with two independent hooks:
 
 Package: `com.lokey0905.FitnessHooks`
 
-Version: `2.2.0` (`versionCode 4`).
+Version: `2.2.1` (`versionCode 6`, pre-release).
 
 The top-right About action shows the app icon, build version, author, and independent-project disclaimer.
 

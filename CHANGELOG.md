@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1 (Pre-release) - 2026-10-23
+
+- Updated versionName to 2.2.1 and versionCode to 6.
+- Published as a pre-release for manual download; the stable-only startup updater in 2.2.0 does not notify for this release.
+- No runtime implementation changes relative to 2.2.0 are present in this source revision.
+
 ## 2.2.0 - 2026-10-11
 
 - Set versionCode to 4 and show `fitness hook` plus the build version in the toolbar.
