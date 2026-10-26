@@ -34,6 +34,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -374,6 +375,7 @@ public final class HookSettingsActivity extends ComponentActivity {
     }
 
     private void refreshEnvironment() {
+        refreshVersionInfo();
         availability = HealthConnectSteps.availability(this);
         sdkHookAllowed = Build.VERSION.SDK_INT < 34
                 && availability == HealthConnectSteps.Availability.AVAILABLE;
@@ -384,6 +386,7 @@ public final class HookSettingsActivity extends ComponentActivity {
         sdkHookSummary.setText(Build.VERSION.SDK_INT >= 34 ? R.string.sdk_hook_unavailable
                 : sdkHookAllowed ? R.string.sdk_hook_summary : R.string.sdk_hook_requires_health);
         ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
+        refreshCompatibilityChecks();
         updateModeViews();
         int generation = ++statusGeneration;
         if (!healthMode() || busy) {
@@ -409,6 +412,57 @@ public final class HookSettingsActivity extends ComponentActivity {
                     result == HealthConnectSteps.Result.READY ? View.GONE : View.VISIBLE
             );
         });
+    }
+
+    private void refreshVersionInfo() {
+        PikminVersionInfo info = PikminVersionInfo.read();
+        ((TextView) findViewById(R.id.device_info_model)).setText(
+                getString(R.string.device_info_model_format, info.manufacturer, info.model).trim()
+        );
+        TextView androidVersion = findViewById(R.id.device_info_android);
+        androidVersion.setText(
+                getString(R.string.device_info_android_format,
+                        info.androidRelease, info.sdkInt, PikminVersionInfo.MIN_SDK)
+        );
+        TextView extension = findViewById(R.id.device_info_extension);
+        if (!info.hasRequiredSdk()) {
+            extension.setText(getString(R.string.device_info_extension_not_applicable,
+                    PikminVersionInfo.MIN_SDK));
+        } else if (info.uExtensionVersion == null) {
+            extension.setText(R.string.device_info_extension_unknown);
+        } else {
+            extension.setText(getString(R.string.device_info_extension_format,
+                    info.uExtensionVersion, PikminVersionInfo.MIN_U_EXTENSION));
+        }
+    }
+
+    private void refreshCompatibilityChecks() {
+        PikminHealthConnectProbe probe = new PikminHealthConnectProbe(this);
+        setCompatibilityResult(R.id.hc_is_supported_icon, R.id.hc_is_supported_result,
+                probe::isSupported);
+        setCompatibilityResult(R.id.hc_os_supports_icon, R.id.hc_os_supports_result,
+                probe::osSupportsHealthConnect);
+    }
+
+    private void setCompatibilityResult(int iconId, int resultId, BooleanSupplier check) {
+        Boolean passed;
+        try {
+            passed = check.getAsBoolean();
+        } catch (RuntimeException | LinkageError ignored) {
+            passed = null;
+        }
+        int icon = passed == null ? R.string.device_info_icon_unknown
+                : passed ? R.string.device_info_icon_passed : R.string.device_info_icon_failed;
+        int color = passed == null ? com.google.android.material.R.attr.colorTertiary
+                : passed ? androidx.appcompat.R.attr.colorPrimary : androidx.appcompat.R.attr.colorError;
+        TextView iconView = findViewById(iconId);
+        TextView resultView = findViewById(resultId);
+        int statusColor = MaterialColors.getColor(iconView, color);
+        iconView.setText(icon);
+        iconView.setTextColor(statusColor);
+        resultView.setText(passed == null ? R.string.hc_probe_unknown
+                : passed ? R.string.hc_probe_passed : R.string.hc_probe_failed);
+        resultView.setTextColor(statusColor);
     }
 
     private void restoreSyncTotal() {
@@ -598,6 +652,7 @@ public final class HookSettingsActivity extends ComponentActivity {
             return;
         }
         ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
+        refreshCompatibilityChecks();
         rememberDraft();
         if (!healthMode()) {
             Toast.makeText(this, R.string.saved, Toast.LENGTH_LONG).show();

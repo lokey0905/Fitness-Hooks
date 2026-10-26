@@ -1,5 +1,6 @@
 package com.lokey0905.FitnessHooks;
 
+import android.content.Context;
 import android.os.Build;
 
 import java.lang.reflect.Method;
@@ -27,20 +28,32 @@ final class SdkGateHook {
         installed += hookBooleanGate(
                 classLoader,
                 "com.nianticproject.ichigo.fitness.FitnessClientHealthConnect",
-                "isSupported"
+                "isSupported",
+                false
         );
         installed += hookBooleanGate(
                 classLoader,
                 "com.nianticproject.ichigo.fitness.FitnessManager",
-                "osSupportsHealthConnect"
+                "osSupportsHealthConnect",
+                false
         );
         return installed;
+    }
+
+    static int installSelf(ClassLoader classLoader) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return 0;
+        }
+        String probe = "com.lokey0905.FitnessHooks.PikminHealthConnectProbe";
+        return hookBooleanGate(classLoader, probe, "isSupported", true)
+                + hookBooleanGate(classLoader, probe, "osSupportsHealthConnect", true);
     }
 
     private static int hookBooleanGate(
             ClassLoader classLoader,
             String className,
-            String methodName
+            String methodName,
+            boolean self
     ) {
         try {
             Class<?> targetClass = XposedHelpers.findClassIfExists(className, classLoader);
@@ -51,10 +64,16 @@ final class SdkGateHook {
 
             Method method = targetClass.getDeclaredMethod(methodName);
             method.setAccessible(true);
+            Method contextGetter = self ? targetClass.getDeclaredMethod("getContext") : null;
+            if (contextGetter != null) {
+                contextGetter.setAccessible(true);
+            }
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    HookConfig.Snapshot config = HookConfig.readFromTarget(classLoader);
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    HookConfig.Snapshot config = self
+                            ? ConfigTransport.readModuleSettings((Context) contextGetter.invoke(param.thisObject))
+                            : HookConfig.readFromTarget(classLoader);
                     if (!config.sdkHookEnabled) {
                         return;
                     }

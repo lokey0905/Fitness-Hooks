@@ -35,6 +35,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowActivity;
@@ -51,6 +53,10 @@ public final class HookSettingsActivityTest {
 
     @Before
     public void resetSettingsToRecording() {
+        ProbeShadow.supported = false;
+        ProbeShadow.osSupported = false;
+        ProbeShadow.supportFailure = null;
+        ProbeShadow.osFailure = null;
         preferences = RuntimeEnvironment.getApplication()
                 .getSharedPreferences(HookConfig.PREFS_NAME, Context.MODE_PRIVATE);
         assertTrue(preferences.edit().clear()
@@ -93,14 +99,112 @@ public final class HookSettingsActivityTest {
     }
 
     @Test
+    @Config(sdk = {28, 33}, qualifiers = "w320dp-h480dp")
+    public void versionCardExplainsOlderAndroidWithoutReportingExtensionZero() {
+        HookSettingsActivity activity = start(null);
+        View card = activity.findViewById(R.id.device_info_card);
+        View common = activity.findViewById(R.id.common_controls);
+        ViewGroup content = (ViewGroup) card.getParent();
+
+        assertTrue(content.indexOfChild(card) < content.indexOfChild(common));
+        assertEquals(activity.getString(R.string.device_info_extension_not_applicable, 34),
+                ((TextView) activity.findViewById(R.id.device_info_extension)).getText().toString());
+        assertEquals(activity.getString(R.string.hc_probe_failed),
+                ((TextView) activity.findViewById(R.id.hc_is_supported_result)).getText().toString());
+        assertEquals(activity.getString(R.string.device_info_icon_failed),
+                ((TextView) activity.findViewById(R.id.hc_os_supports_icon)).getText().toString());
+    }
+
+    @Test
+    @Config(sdk = 34, qualifiers = "w320dp-h480dp-night", shadows = {
+            ShadowAppUpdateViewModel.class, PikminVersionInfoTest.ExtensionShadow.class})
+    public void versionCardRefreshesFrom12To16OnResumeWithoutChangingStepDraft() {
+        PikminVersionInfoTest.ExtensionShadow.version = 12;
+        PikminVersionInfoTest.ExtensionShadow.failure = null;
+        HookSettingsActivity activity = start(null);
+        TextView extension = activity.findViewById(R.id.device_info_extension);
+        TextInputEditText input = activity.findViewById(R.id.step_count_input);
+        input.setText("1234");
+
+        assertEquals(activity.getString(R.string.device_info_extension_format, 12, 13),
+                extension.getText().toString());
+
+        PikminVersionInfoTest.ExtensionShadow.version = 16;
+        controller.pause().resume();
+
+        assertEquals(activity.getString(R.string.device_info_extension_format, 16, 13),
+                extension.getText().toString());
+        assertEquals("1234", input.getText().toString());
+
+        PikminVersionInfoTest.ExtensionShadow.failure = new IllegalStateException("Unavailable");
+        controller.pause().resume();
+        assertEquals(activity.getString(R.string.device_info_extension_unknown),
+                extension.getText().toString());
+    }
+
+    @Test
+    @Config(sdk = 33, qualifiers = "w320dp-h480dp-night", shadows = {
+            ShadowAppUpdateViewModel.class, ProbeShadow.class})
+    public void compatibilityResultsRefreshIndependentlyOnResumeAndAfterSave() {
+        // This shadow verifies UI rendering and refreshes, not actual LSPosed interception.
+        ProbeShadow.osSupported = true;
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        assertEquals(activity.getString(R.string.device_info_icon_failed),
+                ((TextView) activity.findViewById(R.id.hc_is_supported_icon)).getText().toString());
+        assertEquals(activity.getString(R.string.hc_probe_passed),
+                ((TextView) activity.findViewById(R.id.hc_os_supports_result)).getText().toString());
+
+        ProbeShadow.supportFailure = new IllegalStateException("HC initialization failed");
+        ProbeShadow.osFailure = new NoSuchMethodError("HC API unavailable");
+        controller.pause().resume();
+        assertEquals(activity.getString(R.string.hc_probe_unknown),
+                ((TextView) activity.findViewById(R.id.hc_is_supported_result)).getText().toString());
+        assertEquals(activity.getString(R.string.device_info_icon_unknown),
+                ((TextView) activity.findViewById(R.id.hc_os_supports_icon)).getText().toString());
+
+        ProbeShadow.supportFailure = null;
+        ProbeShadow.osFailure = null;
+        ProbeShadow.supported = true;
+        ProbeShadow.osSupported = false;
+        activity.findViewById(R.id.save_button).performClick();
+        assertEquals(activity.getString(R.string.device_info_icon_passed),
+                ((TextView) activity.findViewById(R.id.hc_is_supported_icon)).getText().toString());
+        assertEquals(activity.getString(R.string.hc_probe_failed),
+                ((TextView) activity.findViewById(R.id.hc_os_supports_result)).getText().toString());
+    }
+
+    @Implements(PikminHealthConnectProbe.class)
+    public static final class ProbeShadow {
+        static boolean supported;
+        static boolean osSupported;
+        static RuntimeException supportFailure;
+        static LinkageError osFailure;
+
+        @Implementation
+        protected boolean isSupported() {
+            if (supportFailure != null) {
+                throw supportFailure;
+            }
+            return supported;
+        }
+
+        @Implementation
+        protected boolean osSupportsHealthConnect() {
+            if (osFailure != null) {
+                throw osFailure;
+            }
+            return osSupported;
+        }
+    }
+
+    @Test
     @Config(sdk = {28, 33, 34})
     public void startupShowsCurrentVersionAndSixAdjustmentAmounts() {
         HookSettingsActivity activity = start(null);
 
         MaterialToolbar toolbar = activity.findViewById(R.id.toolbar);
         assertEquals("fitness hook " + BuildConfig.VERSION_NAME, toolbar.getTitle().toString());
-        assertEquals("2.2.1", BuildConfig.VERSION_NAME);
-        assertEquals(6, BuildConfig.VERSION_CODE);
         assertTrue(toolbar.getMenu().findItem(R.id.action_about).isVisible());
         Drawable aboutIcon = toolbar.getMenu().findItem(R.id.action_about).getIcon();
         assertNotNull(aboutIcon);

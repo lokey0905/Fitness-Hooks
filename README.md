@@ -48,6 +48,8 @@ On Android 13 and lower, the SDK hook can override:
 
 It preserves the real `Build.VERSION.SDK_INT`, allowing AndroidX Health Connect to retain its Android 13 provider selection. The SDK hook is not installed on Android 14 or later. With no saved preference, the setting defaults to on on supported Android 13-and-below devices with an available Health Connect provider; saved choices are preserved. It stays disabled when Health Connect is unavailable. The target-side fallback remains off until validated module settings arrive.
 
+The system information card keeps the real SDK and U Extension values. Its **local compatibility checks** run equivalents of Pikmin's `isSupported()` and `osSupportsHealthConnect()`: SDK 34+, an available Health Connect provider, and the background-read feature reported available. The module also hooks these local methods on Android 13 and lower using the same override callback and the app's saved, validated compatibility setting. Include Fitness Hooks in the LSPosed scope and restart it after enabling the module; save the setting to update the local results. These checks do not read health records or request additional permissions. They show results in Fitness Hooks' own process, not confirmation that the separate Pikmin process was hooked or has its read permissions.
+
 ### Recording steps
 
 The step hook targets:

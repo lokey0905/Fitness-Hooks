@@ -16,6 +16,8 @@ public final class FitnessHooksEntry implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam loadPackageParam) {
         if (MODULE_PACKAGE.equals(loadPackageParam.packageName)) {
             installActivationIndicator(loadPackageParam.classLoader);
+            int selfSdkHooks = SdkGateHook.installSelf(loadPackageParam.classLoader);
+            log("module loaded; selfSdkHooks=" + selfSdkHooks);
             return;
         }
 
