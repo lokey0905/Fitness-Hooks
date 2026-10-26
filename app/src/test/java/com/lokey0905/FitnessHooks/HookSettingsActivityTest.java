@@ -9,6 +9,10 @@ import static org.junit.Assert.assertTrue;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.VectorDrawable;
 import android.os.Bundle;
@@ -24,6 +28,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 
 import org.junit.After;
@@ -42,6 +47,7 @@ import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.ShadowDialog;
 import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.shadows.ShadowPackageManager;
 import org.robolectric.util.ReflectionHelpers;
 
 @RunWith(RobolectricTestRunner.class)
@@ -96,6 +102,114 @@ public final class HookSettingsActivityTest {
         activity = start(null);
         assertEquals(R.id.mode_recording,
                 ((MaterialButtonToggleGroup) activity.findViewById(R.id.step_mode_group)).getCheckedButtonId());
+    }
+
+    @Test
+    public void sdkSwitchChoicesPersistImmediatelyAcrossActivityRecreation() {
+        installHealthProvider(true);
+        HookSettingsActivity activity = start(null);
+        MaterialSwitch sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+        assertTrue(sdkSwitch.isEnabled());
+        assertTrue(sdkSwitch.isChecked());
+        assertFalse(preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED));
+
+        // SDK settings save independently from the step form and its Save button.
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("invalid");
+        sdkSwitch.performClick();
+        assertFalse(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true));
+        assertFalse(ConfigTransport.readModuleSettings(activity).sdkHookEnabled);
+        destroyActivity();
+
+        activity = start(null);
+        sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+        assertFalse(sdkSwitch.isChecked());
+        sdkSwitch.performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, false));
+        assertTrue(ConfigTransport.readModuleSettings(activity).sdkHookEnabled);
+        destroyActivity();
+
+        activity = start(null);
+        assertTrue(((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).isChecked());
+    }
+
+    @Test
+    public void unavailableProviderTemporarilyDisablesSdkWithoutErasingSavedChoice() {
+        installHealthProvider(true);
+        assertTrue(preferences.edit().putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true).commit());
+        HookSettingsActivity activity = start(null);
+        MaterialSwitch sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+
+        installHealthProvider(false);
+        controller.pause().resume();
+        assertFalse(sdkSwitch.isEnabled());
+        assertFalse(sdkSwitch.isChecked());
+        assertTrue(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, false));
+        assertFalse(ConfigTransport.readModuleSettings(activity).sdkHookEnabled);
+
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("2222");
+        activity.findViewById(R.id.save_button).performClick();
+        assertEquals(2222, preferences.getInt(HookConfig.KEY_STEP_COUNT, -1));
+        assertTrue(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, false));
+        destroyActivity();
+        activity = start(null);
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).isChecked());
+
+        installHealthProvider(true);
+        controller.pause().resume();
+        sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+        assertTrue(sdkSwitch.isEnabled());
+        assertTrue(sdkSwitch.isChecked());
+        assertTrue(ConfigTransport.readModuleSettings(activity).sdkHookEnabled);
+    }
+
+    @Test
+    public void newlyAvailableProviderRestoresDefaultWithoutWritingAnExplicitChoice() {
+        HookSettingsActivity activity = start(null);
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).isChecked());
+        assertFalse(preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED));
+        activity.findViewById(R.id.save_button).performClick();
+        assertFalse(preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED));
+
+        installHealthProvider(true);
+        controller.pause().resume();
+        assertTrue(((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).isChecked());
+        assertFalse(preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED));
+    }
+
+    @Test
+    public void savedOffChoiceSurvivesStaleViewRestorationAndProviderRecovery() {
+        installHealthProvider(true);
+        HookSettingsActivity activity = start(null);
+        Bundle staleState = new Bundle();
+        controller.saveInstanceState(staleState);
+        ((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).performClick();
+        assertFalse(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true));
+        destroyActivity();
+
+        activity = start(staleState);
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.sdk_hook_switch)).isChecked());
+        assertFalse(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true));
+        installHealthProvider(false);
+        controller.pause().resume();
+        installHealthProvider(true);
+        controller.pause().resume();
+        MaterialSwitch sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+        assertTrue(sdkSwitch.isEnabled());
+        assertFalse(sdkSwitch.isChecked());
+        assertFalse(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true));
+    }
+
+    @Test
+    @Config(sdk = 34)
+    public void android14KeepsCompatibilityDisabledWithoutErasingSavedIntent() {
+        assertTrue(preferences.edit().putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, true).commit());
+        HookSettingsActivity activity = start(null);
+        MaterialSwitch sdkSwitch = activity.findViewById(R.id.sdk_hook_switch);
+        assertFalse(sdkSwitch.isEnabled());
+        assertFalse(sdkSwitch.isChecked());
+        activity.findViewById(R.id.save_button).performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, false));
+        assertFalse(ConfigTransport.readModuleSettings(activity).sdkHookEnabled);
     }
 
     @Test
@@ -485,6 +599,30 @@ public final class HookSettingsActivityTest {
                 .getText().toString());
         assertEquals(400, preferences.getInt(HookConfig.KEY_HEALTH_STEP_COUNT, -1));
         assertNull(((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity());
+    }
+
+    private void installHealthProvider(boolean enabled) {
+        ShadowPackageManager packageManager = Shadow.extract(
+                RuntimeEnvironment.getApplication().getPackageManager());
+        ApplicationInfo application = new ApplicationInfo();
+        application.packageName = HealthConnectSteps.PROVIDER_PACKAGE;
+        application.enabled = enabled;
+        PackageInfo provider = new PackageInfo();
+        provider.packageName = application.packageName;
+        provider.applicationInfo = application;
+        provider.setLongVersionCode(68623);
+        packageManager.installPackage(provider);
+
+        ServiceInfo service = new ServiceInfo();
+        service.packageName = application.packageName;
+        service.name = application.packageName + ".HealthDataService";
+        service.applicationInfo = application;
+        service.enabled = enabled;
+        service.exported = true;
+        ResolveInfo result = new ResolveInfo();
+        result.serviceInfo = service;
+        packageManager.addResolveInfoForIntent(new Intent(
+                "androidx.health.ACTION_BIND_HEALTH_DATA_SERVICE").setPackage(application.packageName), result);
     }
 
     private void dismissStartupReminder() {

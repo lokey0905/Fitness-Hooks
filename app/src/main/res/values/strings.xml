@@ -38,7 +38,7 @@
     <string name="module_inactive_title">LSPosed 模組尚未啟用</string>
     <string name="module_inactive_summary">請在 LSPosed 啟用 Fitness Hooks，並將 Fitness Hooks 與目標 App 加入作用域，再強制停止並重新開啟本程式。</string>
     <string name="sdk_hook">Android 14 SDK 相容模式</string>
-    <string name="sdk_hook_summary">僅用於 Android 13 以下的 Health Connect 相容處理</string>
+    <string name="sdk_hook_summary">僅用於 Android 13 以下的 Health Connect 相容處理；切換後立即儲存</string>
     <string name="sdk_hook_unavailable">Android 14 以上無須啟用</string>
     <string name="sdk_hook_requires_health">請先安裝並啟用 Health Connect；目前無法使用相容模式。</string>
     <string name="mode_recording">Recording API</string>

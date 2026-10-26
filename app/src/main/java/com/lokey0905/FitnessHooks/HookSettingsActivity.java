@@ -1,5 +1,6 @@
 package com.lokey0905.FitnessHooks;
 
+import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -51,6 +52,7 @@ public final class HookSettingsActivity extends ComponentActivity {
     private TextInputLayout stepCountLayout;
     private TextInputEditText stepCountInput;
     private boolean sdkHookAllowed;
+    private boolean changingSdkHook;
     private final HealthConnectSteps healthConnect = new HealthConnectSteps();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private MaterialButtonToggleGroup modeGroup;
@@ -124,7 +126,7 @@ public final class HookSettingsActivity extends ComponentActivity {
         stepHookSwitch.setOnCheckedChangeListener(
                 (button, checked) -> updateModeViews()
         );
-        sdkHookSwitch.setOnCheckedChangeListener((button, checked) -> updateModeViews());
+        sdkHookSwitch.setOnCheckedChangeListener((button, checked) -> saveSdkHookChoice(checked));
         saveButton.setOnClickListener(view -> saveSettings(false));
         findViewById(R.id.health_action).setOnClickListener(view -> healthAction());
         findViewById(R.id.health_settings).setOnClickListener(
@@ -235,7 +237,7 @@ public final class HookSettingsActivity extends ComponentActivity {
             healthHour = state.getLong("health_hour", healthHour);
             restoringSync = state.getBoolean("sync_pending", false);
         }
-        sdkHookSwitch.setChecked(snapshot.sdkHookEnabled);
+        setSdkHookChecked(snapshot.sdkHookEnabled);
         stepHookSwitch.setChecked(preferences().getBoolean(
                 HookConfig.KEY_STEP_HOOK_ENABLED, HookConfig.DEFAULT_STEP_HOOK_ENABLED
         ));
@@ -295,7 +297,13 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
-        super.onRestoreInstanceState(savedInstanceState);
+        changingSdkHook = true;
+        try {
+            super.onRestoreInstanceState(savedInstanceState);
+        } finally {
+            changingSdkHook = false;
+        }
+        setSdkHookChecked(ConfigTransport.readModuleSettings(this).sdkHookEnabled);
         // Drafts carry their original hour; restored view text must not undo rollover handling.
         stepCountInput.setText(healthMode() ? healthDraft : recordingDraft);
         refreshHour();
@@ -379,10 +387,8 @@ public final class HookSettingsActivity extends ComponentActivity {
         availability = HealthConnectSteps.availability(this);
         sdkHookAllowed = Build.VERSION.SDK_INT < 34
                 && availability == HealthConnectSteps.Availability.AVAILABLE;
-        if (!sdkHookAllowed) {
-            sdkHookSwitch.setChecked(false);
-            preferences().edit().putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, false).apply();
-        }
+        setSdkHookChecked(sdkHookAllowed && preferences().getBoolean(
+                HookConfig.KEY_SDK_HOOK_ENABLED, HookConfig.DEFAULT_SDK_HOOK_ENABLED));
         sdkHookSummary.setText(Build.VERSION.SDK_INT >= 34 ? R.string.sdk_hook_unavailable
                 : sdkHookAllowed ? R.string.sdk_hook_summary : R.string.sdk_hook_requires_health);
         ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
@@ -434,6 +440,49 @@ public final class HookSettingsActivity extends ComponentActivity {
             extension.setText(getString(R.string.device_info_extension_format,
                     info.uExtensionVersion, PikminVersionInfo.MIN_U_EXTENSION));
         }
+    }
+
+    private void setSdkHookChecked(boolean checked) {
+        changingSdkHook = true;
+        try {
+            sdkHookSwitch.setChecked(checked);
+        } finally {
+            changingSdkHook = false;
+        }
+    }
+
+    @SuppressLint("ApplySharedPref") // Persist both the choice and any rollback before returning to the UI.
+    private void saveSdkHookChoice(boolean checked) {
+        if (changingSdkHook) {
+            return;
+        }
+        SharedPreferences preferences = preferences();
+        boolean hadSavedChoice = preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED);
+        boolean previous = preferences.getBoolean(
+                HookConfig.KEY_SDK_HOOK_ENABLED, HookConfig.DEFAULT_SDK_HOOK_ENABLED);
+        if (!sdkHookAllowed || busy || restoringSync) {
+            setSdkHookChecked(sdkHookAllowed && previous);
+            updateModeViews();
+            return;
+        }
+        if (!preferences.edit().putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, checked).commit()) {
+            // A failed commit may already have changed the in-memory preference value.
+            SharedPreferences.Editor rollback = preferences.edit();
+            if (hadSavedChoice) {
+                rollback.putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, previous);
+            } else {
+                rollback.remove(HookConfig.KEY_SDK_HOOK_ENABLED);
+            }
+            rollback.commit();
+            setSdkHookChecked(previous);
+            Toast.makeText(this, R.string.save_failed, Toast.LENGTH_LONG).show();
+            updateModeViews();
+            refreshCompatibilityChecks();
+            return;
+        }
+        ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
+        updateModeViews();
+        refreshCompatibilityChecks();
     }
 
     private void refreshCompatibilityChecks() {
@@ -639,10 +688,8 @@ public final class HookSettingsActivity extends ComponentActivity {
             return;
         }
 
-        boolean sdkEnabled = sdkHookAllowed && sdkHookSwitch.isChecked();
         SharedPreferences.Editor editor = preferences()
                 .edit()
-                .putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, sdkEnabled)
                 .putBoolean(HookConfig.KEY_STEP_HOOK_ENABLED, stepHookSwitch.isChecked());
         if (!healthMode()) {
             editor.putInt(HookConfig.KEY_STEP_COUNT, stepCount);
