@@ -371,13 +371,20 @@ public final class HookSettingsActivity extends ComponentActivity {
                 stepCountLayout.setError(null);
             }
         }
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd HH:mm xxx")
-                .withZone(ZoneId.systemDefault());
-        String interval = formatter.format(Instant.ofEpochSecond(healthHour)) + " - "
-                + DateTimeFormatter.ofPattern("HH:mm xxx").withZone(ZoneId.systemDefault())
-                        .format(Instant.ofEpochSecond(healthHour + 3600));
+        ZoneId zone = ZoneId.systemDefault();
+        Instant start = Instant.ofEpochSecond(healthHour);
+        Instant end = Instant.ofEpochSecond(healthHour + 3600);
+        String interval = DateTimeFormatter.ofPattern("MM/dd HH:mm").withZone(zone).format(start)
+                + " - " + DateTimeFormatter.ofPattern("HH:mm").withZone(zone).format(end);
+        DateTimeFormatter offsetFormatter = DateTimeFormatter.ofPattern("xxx").withZone(zone);
+        String startOffset = offsetFormatter.format(start);
+        String endOffset = offsetFormatter.format(end);
+        String timeZone = "UTC" + startOffset;
+        if (!startOffset.equals(endOffset)) {
+            timeZone += " → UTC" + endOffset;
+        }
         ((TextView) findViewById(R.id.health_hour)).setText(
-                getString(R.string.health_hour_format, interval)
+                getString(R.string.health_hour_format, interval, timeZone)
         );
         return changed;
     }

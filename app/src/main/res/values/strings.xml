@@ -50,7 +50,7 @@
     <string name="cancel">取消</string>
     <string name="health_step_count">目前小時的手動步數</string>
     <string name="health_step_explanation">僅更新本 App 在目前小時的手動步數；重複同步不會累加，輸入 0 可清除這筆紀錄，其他來源不受影響。切換到下一小時後重新開始。這不是 Health Connect 的今日總步數。</string>
-    <string name="health_hour_format">時段：%1$s（裝置當地時間）</string>
+    <string name="health_hour_format">時段：%1$s（%2$s，裝置當地時間）</string>
     <string name="health_hour_changed">已進入新的小時，請重新確認步數後再同步。</string>
     <string name="health_checking">正在檢查 Health Connect…</string>
     <string name="health_ready">Health Connect 已就緒，可同步手動步數。</string>
