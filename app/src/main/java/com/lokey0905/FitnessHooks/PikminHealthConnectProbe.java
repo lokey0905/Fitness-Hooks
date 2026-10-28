@@ -18,12 +18,12 @@ final class PikminHealthConnectProbe {
     private static final Source ANDROIDX = new Source() {
         @Override
         public int sdkStatus(Context context) {
-            return HealthConnectClient.getSdkStatus(context, HealthConnectSteps.PROVIDER_PACKAGE);
+            return HealthConnectSteps.sdkStatus(context);
         }
 
         @Override
         public int backgroundReadFeatureStatus(Context context) {
-            return HealthConnectClient.getOrCreate(context).getFeatures().getFeatureStatus(
+            return HealthConnectSteps.createClient(context).getFeatures().getFeatureStatus(
                     HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND);
         }
     };

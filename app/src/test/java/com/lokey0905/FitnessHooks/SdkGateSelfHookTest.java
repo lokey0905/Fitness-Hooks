@@ -13,7 +13,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
-import android.os.ext.SdkExtensions;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
@@ -76,14 +75,12 @@ public final class SdkGateSelfHookTest {
 
     @Test
     @Config(sdk = {34, 35, 36})
-    public void android14AndNewerUseExtensionScopeInsteadOfSdkGateOverride() {
+    public void android14AndNewerKeepOnlyTheActivationHook() {
         int originalSdk = Build.VERSION.SDK_INT;
         loadPackage(ConfigTransport.MODULE_PACKAGE);
 
         assertEquals(BridgeShadow.logs.toString(), Set.of(
-                HookSettingsActivity.class.getName() + ".isModuleActive",
-                PikminHealthConnectProbe.class.getName() + ".isSupported",
-                SdkExtensions.class.getName() + ".getExtensionVersion"), registeredMethods());
+                HookSettingsActivity.class.getName() + ".isModuleActive"), registeredMethods());
         assertEquals(originalSdk, Build.VERSION.SDK_INT);
     }
 

@@ -18,7 +18,7 @@ public final class ConfigRequestReceiver extends BroadcastReceiver {
         HookConfig.Snapshot snapshot = ConfigTransport.readModuleSettings(context);
         ConfigTransport.publishToTarget(context, snapshot);
         Log.i(TAG, "Published config to target; sdk=" + snapshot.sdkHookEnabled
-                + "; uExtension=" + snapshot.uExtensionHookEnabled
+                + "; standaloneHc=" + snapshot.standaloneHcEnabled
                 + "; steps=" + snapshot.stepHookEnabled
                 + "; count=" + snapshot.stepCount);
     }

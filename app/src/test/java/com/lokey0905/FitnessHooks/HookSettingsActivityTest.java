@@ -68,6 +68,9 @@ public final class HookSettingsActivityTest {
         ProbeShadow.supportFailure = null;
         ProbeShadow.osFailure = null;
         AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        AvailableHealthConnectShadow.deferPermission = false;
+        AvailableHealthConnectShadow.pendingPermission = null;
+        AvailableHealthConnectShadow.pendingSync = null;
         DynamicColorsShadow.calls = 0;
         preferences = RuntimeEnvironment.getApplication()
                 .getSharedPreferences(HookConfig.PREFS_NAME, Context.MODE_PRIVATE);
@@ -409,12 +412,12 @@ public final class HookSettingsActivityTest {
         assertEquals(R.id.sdk_hook_card, health.getChildAt(0).getId());
         assertNull(((ViewGroup) common).findViewById(R.id.sdk_hook_card));
         assertFalse(activity.findViewById(R.id.sdk_hook_card).isShown());
-        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
+        assertEquals(View.GONE, activity.findViewById(R.id.standalone_hc_card).getVisibility());
 
         mode.check(R.id.mode_health);
 
         assertTrue(activity.findViewById(R.id.sdk_hook_card).isShown());
-        assertFalse(activity.findViewById(R.id.u_extension_hook_card).isShown());
+        assertFalse(activity.findViewById(R.id.standalone_hc_card).isShown());
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             assertFalse(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
         }
@@ -425,7 +428,7 @@ public final class HookSettingsActivityTest {
 
     @Test
     @Config(sdk = {28, 33}, qualifiers = "w320dp-h480dp")
-    public void settingsDefaultOffAndExperimentalOptionDoesNotEnableUExtensionOnOlderAndroid() {
+    public void settingsDefaultOffAndExperimentalOptionDoesNotEnableStandaloneProviderOnOlderAndroid() {
         installHealthProvider(true);
         assertTrue(preferences.edit().putString(HookConfig.KEY_STEP_MODE,
                 HookConfig.MODE_HEALTH_CONNECT).commit());
@@ -438,11 +441,11 @@ public final class HookSettingsActivityTest {
 
         experimental.performClick();
         assertTrue(preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false));
-        assertTrue(activity.findViewById(R.id.u_extension_hook_card).isShown());
-        assertFalse(activity.findViewById(R.id.u_extension_hook_switch).isEnabled());
-        assertFalse(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
-        assertEquals(activity.getString(R.string.u_extension_hook_older_android),
-                ((TextView) activity.findViewById(R.id.u_extension_hook_summary)).getText().toString());
+        assertTrue(activity.findViewById(R.id.standalone_hc_card).isShown());
+        assertFalse(activity.findViewById(R.id.standalone_hc_switch).isEnabled());
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.standalone_hc_switch)).isChecked());
+        assertEquals(activity.getString(R.string.standalone_hc_older_android),
+                ((TextView) activity.findViewById(R.id.standalone_hc_summary)).getText().toString());
         assertTrue(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
         dialog.dismiss();
         destroyActivity();
@@ -450,81 +453,149 @@ public final class HookSettingsActivityTest {
         activity = start(null);
         dialog = openAppSettings(activity);
         assertTrue(((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).isChecked());
-        assertTrue(activity.findViewById(R.id.u_extension_hook_card).isShown());
+        assertTrue(activity.findViewById(R.id.standalone_hc_card).isShown());
     }
 
     @Test
     @Config(sdk = 34, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
-    public void experimentalMasterAndUExtensionChoicePersistWithoutErasingSavedIntent() {
+    public void experimentalMasterAndStandaloneProviderChoicePersistWithoutErasingSavedIntent() {
         assertTrue(preferences.edit().putString(HookConfig.KEY_STEP_MODE,
-                HookConfig.MODE_HEALTH_CONNECT).commit());
+                HookConfig.MODE_HEALTH_CONNECT)
+                .putBoolean("u_extension_hook_enabled", true).commit());
         HookSettingsActivity activity = start(null);
-        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
+        assertEquals(View.GONE, activity.findViewById(R.id.standalone_hc_card).getVisibility());
         AlertDialog dialog = openAppSettings(activity);
         ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
         assertTrue(preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false));
         dialog.dismiss();
 
-        MaterialSwitch extension = activity.findViewById(R.id.u_extension_hook_switch);
-        assertTrue(extension.isEnabled());
-        assertFalse(extension.isChecked());
+        MaterialSwitch provider = activity.findViewById(R.id.standalone_hc_switch);
+        assertTrue(provider.isEnabled());
+        // A previous U Extension choice must not opt into a different provider.
+        assertFalse(provider.isChecked());
         assertFalse(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
         // Compatibility choices do not require a valid step draft or pressing Sync.
         ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("invalid");
-        extension.performClick();
-        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
-        assertTrue(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        provider.performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        assertTrue(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
         Bundle staleState = new Bundle();
         controller.saveInstanceState(staleState);
-        extension.performClick();
-        assertFalse(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, true));
+        provider.performClick();
+        assertFalse(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, true));
         destroyActivity();
 
         activity = start(staleState);
-        extension = activity.findViewById(R.id.u_extension_hook_switch);
-        assertFalse(extension.isChecked());
-        extension.performClick();
+        provider = activity.findViewById(R.id.standalone_hc_switch);
+        assertFalse(provider.isChecked());
+        provider.performClick();
         dialog = openAppSettings(activity);
         ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
-        assertFalse(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
-        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
-        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
+        assertFalse(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
+        assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        assertEquals(View.GONE, activity.findViewById(R.id.standalone_hc_card).getVisibility());
         dialog.dismiss();
         destroyActivity();
 
         activity = start(null);
-        assertFalse(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.standalone_hc_switch)).isChecked());
         dialog = openAppSettings(activity);
         ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
-        assertTrue(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
-        assertTrue(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        assertTrue(((MaterialSwitch) activity.findViewById(R.id.standalone_hc_switch)).isChecked());
+        assertTrue(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
         dialog.dismiss();
         ((MaterialButtonToggleGroup) activity.findViewById(R.id.step_mode_group)).check(R.id.mode_recording);
-        assertFalse(activity.findViewById(R.id.u_extension_hook_card).isShown());
+        assertFalse(activity.findViewById(R.id.standalone_hc_card).isShown());
     }
 
     @Test
     @Config(sdk = 34, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
-    public void unavailableHealthConnectDisablesUExtensionWithoutErasingChoice() {
+    public void android14StandaloneSelectionOffersApkDownloadAndUpdateWithoutLosingDrafts() {
+        assertTrue(preferences.edit()
+                .putBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, true).commit());
+        HookSettingsActivity activity = start(null);
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("1234");
+        MaterialButtonToggleGroup modes = activity.findViewById(R.id.step_mode_group);
+        modes.check(R.id.mode_health);
+        dismissStartupReminder();
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("5678");
+        MaterialSwitch provider = activity.findViewById(R.id.standalone_hc_switch);
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.INSTALL_REQUIRED;
+        provider.performClick();
+        assertTrue(provider.isEnabled());
+        assertTrue(provider.isChecked());
+        assertTrue(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
+        assertFalse(activity.findViewById(R.id.save_button).isEnabled());
+        assertEquals(activity.getString(R.string.standalone_hc_missing),
+                ((TextView) activity.findViewById(R.id.health_status)).getText().toString());
+        assertEquals("5678", ((TextInputEditText) activity.findViewById(R.id.step_count_input))
+                .getText().toString());
+        assertEquals(activity.getString(R.string.health_download),
+                ((TextView) activity.findViewById(R.id.health_action_title)).getText().toString());
+        assertTrue(activity.findViewById(R.id.health_action).isShown());
+        activity.findViewById(R.id.health_action).performClick();
+        Intent download = ((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity();
+        assertNotNull(download);
+        assertEquals("market://details?id=com.google.android.apps.healthdata", download.getDataString());
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.UPDATE_REQUIRED;
+        controller.pause().resume();
+        assertTrue(provider.isEnabled());
+        assertTrue(provider.isChecked());
+        assertEquals(activity.getString(R.string.health_update),
+                ((TextView) activity.findViewById(R.id.health_action_title)).getText().toString());
+        assertEquals(activity.getString(R.string.standalone_hc_update_required),
+                ((TextView) activity.findViewById(R.id.health_status)).getText().toString());
+        assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        assertTrue(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.UNAVAILABLE;
+        controller.pause().resume();
+        assertTrue(provider.isChecked());
+        assertEquals(activity.getString(R.string.standalone_hc_unavailable),
+                ((TextView) activity.findViewById(R.id.health_status)).getText().toString());
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        provider.performClick();
+        assertFalse(provider.isChecked());
+        assertEquals("5678", ((TextInputEditText) activity.findViewById(R.id.step_count_input))
+                .getText().toString());
+        modes.check(R.id.mode_recording);
+        assertEquals("1234", ((TextInputEditText) activity.findViewById(R.id.step_count_input))
+                .getText().toString());
+        assertNull(AvailableHealthConnectShadow.pendingSync);
+    }
+
+    @Test
+    @Config(sdk = 34, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void providerAndExperimentalMasterCannotChangeDuringSyncOrRestoration() {
         assertTrue(preferences.edit()
                 .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT)
                 .putBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, true)
-                .putBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, true).commit());
+                .putBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, true).commit());
         HookSettingsActivity activity = start(null);
-        MaterialSwitch extension = activity.findViewById(R.id.u_extension_hook_switch);
-        assertTrue(extension.isChecked());
+        dismissStartupReminder();
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("400");
+        activity.findViewById(R.id.save_button).performClick();
+        assertNotNull(AvailableHealthConnectShadow.pendingSync);
+        assertProviderSwitchesLocked(activity);
 
-        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.PROFILE_UNSUPPORTED;
-        controller.pause().resume();
-        assertFalse(extension.isEnabled());
-        assertFalse(extension.isChecked());
-        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
-        assertFalse(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        Bundle state = new Bundle();
+        controller.saveInstanceState(state);
+        assertTrue(state.getBoolean("sync_pending"));
+        destroyActivity();
+        AvailableHealthConnectShadow.deferPermission = true;
+        activity = start(state);
+        assertNotNull(AvailableHealthConnectShadow.pendingPermission);
+        assertProviderSwitchesLocked(activity);
 
-        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        AvailableHealthConnectShadow.deferPermission = false;
+        AvailableHealthConnectShadow.pendingPermission.onResult(HealthConnectSteps.Result.READY);
         controller.pause().resume();
-        assertTrue(extension.isEnabled());
-        assertTrue(extension.isChecked());
+        assertTrue(activity.findViewById(R.id.standalone_hc_switch).isEnabled());
+        AlertDialog dialog = openAppSettings(activity);
+        assertTrue(dialog.findViewById(R.id.experimental_features_switch).isEnabled());
     }
 
     @Test
@@ -580,6 +651,9 @@ public final class HookSettingsActivityTest {
     @Implements(HealthConnectSteps.class)
     public static final class AvailableHealthConnectShadow {
         static HealthConnectSteps.Availability result;
+        static boolean deferPermission;
+        static HealthConnectSteps.Callback pendingPermission;
+        static HealthConnectSteps.Callback pendingSync;
 
         @Implementation
         protected static HealthConnectSteps.Availability availability(Context context) {
@@ -588,7 +662,16 @@ public final class HookSettingsActivityTest {
 
         @Implementation
         protected void checkPermission(Context context, HealthConnectSteps.Callback callback) {
-            callback.onResult(HealthConnectSteps.Result.READY);
+            if (deferPermission) {
+                pendingPermission = callback;
+            } else {
+                callback.onResult(HealthConnectSteps.Result.READY);
+            }
+        }
+
+        @Implementation
+        protected void sync(Context context, int count, long hour, HealthConnectSteps.Callback callback) {
+            pendingSync = callback;
         }
     }
 
@@ -836,6 +919,21 @@ public final class HookSettingsActivityTest {
         assertNotNull(dialog);
         assertTrue(dialog.isShowing());
         return dialog;
+    }
+
+    private void assertProviderSwitchesLocked(HookSettingsActivity activity) {
+        MaterialSwitch provider = activity.findViewById(R.id.standalone_hc_switch);
+        assertFalse(provider.isEnabled());
+        provider.setChecked(false);
+        assertTrue(provider.isChecked());
+        assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        AlertDialog dialog = openAppSettings(activity);
+        MaterialSwitch master = dialog.findViewById(R.id.experimental_features_switch);
+        assertFalse(master.isEnabled());
+        master.setChecked(false);
+        assertTrue(master.isChecked());
+        assertTrue(preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false));
+        dialog.dismiss();
     }
 
     private HookSettingsActivity start(Bundle state) {

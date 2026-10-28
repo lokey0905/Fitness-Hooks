@@ -117,7 +117,7 @@ class HealthConnectSteps {
                         if (availability(appContext) != Availability.AVAILABLE) {
                             return@withContext Result.UNAVAILABLE
                         }
-                        val client = HealthConnectClient.getOrCreate(appContext)
+                        val client = createClient(appContext)
                         if (!client.permissionController.getGrantedPermissions().containsAll(writePermissions())) {
                             return@withContext Result.PERMISSION_REQUIRED
                         }
@@ -160,7 +160,7 @@ class HealthConnectSteps {
         @JvmStatic
         fun availability(context: Context): Availability {
             return try {
-                val sdkStatus = HealthConnectClient.getSdkStatus(context)
+                val sdkStatus = sdkStatus(context)
                 val userManager = context.getSystemService(UserManager::class.java)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && userManager?.isManagedProfile == true) {
                     return Availability.WORK_PROFILE_UNSUPPORTED
@@ -169,7 +169,9 @@ class HealthConnectSteps {
                 when (sdkStatus) {
                     HealthConnectClient.SDK_AVAILABLE -> Availability.AVAILABLE
                     HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                            && !StandaloneHealthConnect.isModuleSelected(context)
+                        ) {
                             Availability.UNAVAILABLE
                         } else {
                             try {
@@ -190,14 +192,72 @@ class HealthConnectSteps {
         }
 
         @JvmStatic
+        fun sdkStatus(context: Context): Int =
+            if (StandaloneHealthConnect.isModuleSelected(context)) {
+                StandaloneHealthConnect.sdkStatus(context)
+            } else {
+                HealthConnectClient.getSdkStatus(context)
+            }
+
+        @JvmStatic
+        fun createClient(context: Context): HealthConnectClient =
+            if (StandaloneHealthConnect.isModuleSelected(context)) {
+                // Never fall back to a different data store after the user selects the APK.
+                StandaloneHealthConnect.createClient(context, HealthConnectSteps::class.java.classLoader)
+                    as HealthConnectClient
+            } else {
+                HealthConnectClient.getOrCreate(context)
+            }
+
+        private val appPermissionContract: ActivityResultContract<Set<String>, Set<String>> by lazy {
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val contract = Class.forName(
+                    "androidx.health.connect.client.permission.HealthPermissionsRequestAppContract",
+                    true,
+                    HealthConnectSteps::class.java.classLoader,
+                ).getDeclaredConstructor(String::class.java).newInstance(PROVIDER_PACKAGE)
+                    as ActivityResultContract<Set<String>, Set<String>>
+                contract
+            } catch (failure: ReflectiveOperationException) {
+                throw IllegalStateException("Standalone Health Connect permission contract unavailable", failure)
+            }
+        }
+
+        @JvmStatic
         fun permissionContract(): ActivityResultContract<Set<String>, Set<String>> =
-            PermissionController.createRequestPermissionResultContract()
+            object : ActivityResultContract<Set<String>, Set<String>>() {
+                private val defaultContract = PermissionController.createRequestPermissionResultContract()
+
+                // The selected provider can change after ActivityResult registration.
+                private fun currentContract(context: Context) =
+                    if (StandaloneHealthConnect.isModuleSelected(context)) appPermissionContract
+                    else defaultContract
+
+                override fun createIntent(context: Context, input: Set<String>): Intent =
+                    currentContract(context).createIntent(context, input)
+
+                override fun getSynchronousResult(context: Context, input: Set<String>) =
+                    currentContract(context).getSynchronousResult(context, input)
+
+                override fun parseResult(resultCode: Int, intent: Intent?): Set<String> =
+                    if (intent?.hasExtra("granted_permissions_string") == true) {
+                        // Inspect the response format so a recreated Activity parses an in-flight
+                        // APK request correctly even if its provider setting has since changed.
+                        appPermissionContract.parseResult(resultCode, intent)
+                    } else {
+                        defaultContract.parseResult(resultCode, intent)
+                    }
+            }
 
         @JvmStatic
         fun writePermissions(): Set<String> = setOf(HealthPermission.getWritePermission(StepsRecord::class))
 
         @JvmStatic
         fun settingsIntent(context: Context): Intent {
+            if (StandaloneHealthConnect.isModuleSelected(context)) {
+                return StandaloneHealthConnect.settingsIntent(context)
+            }
             val intent = Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 intent.setPackage(PROVIDER_PACKAGE)

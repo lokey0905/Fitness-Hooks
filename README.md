@@ -3,7 +3,7 @@
 An LSPosed module for Pikmin Bloom with independent compatibility and step hooks:
 
 - Android 13 Health Connect SDK-gate compatibility.
-- Experimental Android 14+ U Extension support-check compatibility.
+- Experimental Android 14+ routing to the standalone Health Connect APK.
 - Recording API on mobile step-result override.
 
 Package: `com.lokey0905.FitnessHooks`
@@ -32,7 +32,7 @@ Health Connect sync uses the official AndroidX client with user-granted `WRITE_S
 
 Repeated sync updates the same record using a fixed hourly client ID and a persisted increasing version. The record is marked `Metadata.manualEntry`, with Fitness Hooks as the data origin. Setting zero deletes this app's step records in the current-hour interval. Other apps' records are not modified. Sync has no background worker and does not request read or background permissions.
 
-Android 13 and lower require an installed, enabled, up-to-date standalone Health Connect provider. The app offers the Google Play download/update page and disables unavailable SDK compatibility and sync controls. Android 14 and later use the framework provider. Managed work profiles remain blocked according to Health Connect's documented limitation. Other OEM clone spaces are not assumed to be work profiles: the app follows `HealthConnectClient.getSdkStatus`, then initializes the client and checks granted permissions before operations. In AndroidX 1.1.0, Android 14+ still reports unavailable when `UserManager.isProfile()` is true or the framework service is absent; the app does not bypass this check. Opening system Health Connect settings is not proof that a cloned app can write, and XSpace-specific behavior has not been device-verified. Installing an APK cannot add a missing framework service. Permission checks and writes still handle initialization failure or permission revocation.
+Android 13 and lower require an installed, enabled, up-to-date standalone Health Connect provider. The app offers the Google Play download/update page and disables unavailable SDK compatibility and sync controls. Android 14 and later use the framework provider by default, with an experimental APK route described below. Managed work profiles remain blocked. Other OEM clone spaces are not assumed to be work profiles: the default route follows `HealthConnectClient.getSdkStatus`, then initializes the client and checks granted permissions before operations. In AndroidX 1.1.0, the Android 14+ framework route reports unavailable when `UserManager.isProfile()` is true or the framework service is absent. The experimental APK route checks the APK in the current Android user instead. Opening a settings page is not proof that a cloned app can read or write, and XSpace-specific behavior has not been device-verified. Permission checks and writes still handle initialization failure or permission revocation.
 
 Writing successfully to Health Connect does not prove that another app has read or accepted the record. Grant that app its own step-read permissions. Health Connect can apply source priority and aggregation rules.
 
@@ -49,15 +49,19 @@ On Android 13 and lower, the SDK hook can override:
 
 It preserves the real `Build.VERSION.SDK_INT`, allowing AndroidX Health Connect to retain its Android 13 provider selection. The SDK hook is not installed on Android 14 or later. With no saved preference, the setting defaults to on on supported Android 13-and-below devices with an available Health Connect provider; saved choices are preserved. It stays disabled when Health Connect is unavailable. The target-side fallback remains off until validated module settings arrive.
 
-The system information card keeps the real SDK and U Extension values. Its **local compatibility checks** run equivalents of Pikmin's `isSupported()` and `osSupportsHealthConnect()`: SDK 34+, an available Health Connect provider, and the background-read feature reported available. The module also hooks these local methods on Android 13 and lower using the same override callback and the app's saved, validated compatibility setting. Include Fitness Hooks in the LSPosed scope and restart it after enabling the module. The compatibility controls appear below the mode selector in Health Connect mode. Changing a compatibility switch immediately saves the preference, publishes the effective setting, and refreshes the local checks. Temporary provider unavailability disables the effective override without erasing the saved preference. These checks do not read health records or request additional permissions. They show results in Fitness Hooks' own process, not confirmation that the separate Pikmin process was hooked or has its read permissions.
+The system information card keeps the real SDK and U Extension values. Its **local compatibility checks** run equivalents of Pikmin's `isSupported()` and `osSupportsHealthConnect()`: SDK 34+, an available selected Health Connect provider, and the background-read feature reported available. The module also hooks these local methods on Android 13 and lower using the same override callback and the app's saved, validated SDK compatibility setting. Include Fitness Hooks in the LSPosed scope and restart it after enabling the module. The compatibility controls appear below the mode selector in Health Connect mode. Changing a compatibility switch immediately saves the preference, publishes the effective setting, and refreshes the local checks. Temporary provider unavailability disables the Android 13 SDK override without erasing the saved preference. These checks do not read health records or request additional permissions. They show results in Fitness Hooks' own process, not confirmation that the separate Pikmin process was hooked or has its read permissions.
 
-### Experimental U Extension compatibility
+### Experimental standalone Health Connect on Android 14+
 
-Open Settings from the toolbar and enable **Experimental features** to show the U Extension compatibility switch in Health Connect mode. Both experimental features and the U Extension override default to off. The override requires Android 14 or later and an available Health Connect provider. Turning off experimental features disables the effective override while retaining the saved switch preference.
+Open Settings from the toolbar, enable **Experimental features**, and turn on **Use standalone Health Connect** in Health Connect mode. Both settings default to off. This replaces the former U Extension override; its old saved switch is deliberately ignored. Android 13 already uses the APK provider and does not need this option. The app never changes `SDK_INT`, system properties, or U Extension results.
 
-During `FitnessClientHealthConnect.isSupported()` in Pikmin, or the equivalent local probe, the hook raises a successful `SdkExtensions.getExtensionVersion(34)` result from 0–12 to 13. Values of 13 or higher remain unchanged. Queries outside that method, other extension levels, and API failures keep their original behavior. `osSupportsHealthConnect()` delegates to `isSupported()`. The hook preserves provider/profile checks, client initialization and permission checks, and does not change system properties or the Android SDK version.
+The selected route uses `com.google.android.apps.healthdata` for both Fitness Hooks writes and Pikmin reads. The module creates the AndroidX APK client directly; the target hooks replace the factory/status selection and explicitly open the APK settings page. APK permission requests remain separate from framework permissions. Pikmin still requires genuine step-read and background-read grants from the APK. The local probe checks the APK feature implementation instead of the platform extension. No permission grant or feature result is fabricated.
 
-This is an experimental support-check override, not an implementation of missing platform features. Android 13 uses the standalone provider and the existing SDK gate override; success there does not establish that an older Android 14 framework provider supports the required background-read behavior. Device compatibility for the U Extension override has not been verified.
+Install or update the standalone APK in the same Android user. A version code of at least `171302`, an enabled exported Health Data service, and APK background-feature availability are required. Missing, outdated, disabled, or failing APK providers stop the selected operation; they never silently fall back to the system data store. Turning off the experimental master setting restores normal routing while retaining the APK choice. Switching routes is disabled during a step sync.
+
+After changing the route, force-stop and reopen Pikmin to reinitialize its background work. The hook also invalidates its cached client on observed route changes. Grant Fitness Hooks write permission and Pikmin its own read/background permissions in the APK provider. Existing system-HC records and permissions are not copied; input drafts are retained and syncing writes only to the selected provider. Other apps such as Google Fit keep their own provider choice, so their records will not automatically appear in this APK data store.
+
+This is an unsupported experimental route: a newer standalone APK may redirect Android 14 users to system HC or reject the connection. Its provider-side behavior, actual background reads, and device/profile compatibility have not been verified. Installation/version checks and automated tests do not establish runtime provider support.
 
 ### Appearance settings
 
@@ -97,9 +101,9 @@ The Material 3 settings screen provides quick `+/- 1`, `10`, `100`, `500`, `1000
 Example LSPosed logs for Android 13 with SDK and Recording hooks enabled:
 
 ```text
-FitnessHooks: target loaded; configBridgeHooks=1; sdkHooks=2; uExtensionHooks=0; stepHooks=1
-FitnessHooks: target config received; saved=true; sdk=true; uExtension=false; steps=true; count=6000
-FitnessHooks: config loaded from target storage; sdk=true; uExtension=false; steps=true; count=6000
+FitnessHooks: target loaded; configBridgeHooks=1; sdkHooks=2; standaloneHcHooks=0; stepHooks=1
+FitnessHooks: target config received; saved=true; sdk=true; standaloneHc=false; steps=true; count=6000
+FitnessHooks: config loaded from target storage; sdk=true; standaloneHc=false; steps=true; count=6000
 FitnessHooks: Recording step override active; steps=6000
 ```
 
@@ -136,7 +140,7 @@ The local `app/libs/xposed-api-stubs.jar` dependency is `compileOnly` and is not
 
 ## Compatibility Notes
 
-- The original hooks target names and signatures observed in Pikmin Bloom 153.0. The U Extension hook targets the HC support check inspected in 156.0. Later releases may rename or remove these methods.
+- The original hooks target names and signatures observed in Pikmin Bloom 153.0. The standalone-provider route targets the HC implementation inspected in 156.0. Later releases may rename or remove these methods.
 - A successful SDK hook does not prove that the Health Connect provider is installed, available, or authorized.
 - A successful step hook proves only that Pikmin received the replacement protobuf; it does not prove server acceptance or the awarded delta.
 - Settings are per Android user. Configure the module in the same user/profile that runs Pikmin.

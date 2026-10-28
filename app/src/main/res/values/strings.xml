@@ -47,10 +47,13 @@
     <string name="sdk_hook_summary">僅用於 Android 13 以下的 Health Connect 相容處理；切換後立即儲存</string>
     <string name="sdk_hook_unavailable">Android 14 以上無須啟用</string>
     <string name="sdk_hook_requires_health">請先安裝並啟用 Health Connect；目前無法使用相容模式。</string>
-    <string name="u_extension_hook">U Extension 相容（實驗性）</string>
-    <string name="u_extension_hook_summary">適用 Android 14 以上。僅在 HC 支援檢查期間，將低於 13 的 API 回報提升至 13；不會補上系統功能，效果仍待驗證。切換後立即儲存。</string>
-    <string name="u_extension_hook_older_android">Android 13 以下請使用 Android 14 SDK 相容模式。</string>
-    <string name="u_extension_hook_requires_health">請先確認 Health Connect 可用，才能啟用此實驗功能。</string>
+    <string name="standalone_hc">使用獨立版 Health Connect（實驗性）</string>
+    <string name="standalone_hc_summary">Android 14 以上改用獨立版 HC，需另行安裝、更新及授權。資料與系統版分開，不會自動轉移。切換後請強制停止並重新開啟 Pikmin。此功能仍在測試中。</string>
+    <string name="standalone_hc_older_android">Android 13 以下原本就使用獨立版 Health Connect，不需要此開關。</string>
+    <string name="standalone_hc_restart">設定已儲存；請強制停止並重新開啟 Pikmin，讓 Health Connect 背景工作重新初始化。</string>
+    <string name="standalone_hc_missing">已選用獨立版 Health Connect，請先安裝並啟用 APK，再完成授權。目前不會改用系統版。</string>
+    <string name="standalone_hc_update_required">請更新或啟用獨立版 Health Connect，再重新授權。目前不會改用系統版。</string>
+    <string name="standalone_hc_unavailable">獨立版 Health Connect 在目前環境無法使用，請確認 APK 是否可正常開啟及授權。目前不會改用系統版。</string>
     <string name="mode_recording">Recording API</string>
     <string name="mode_health">Health Connect</string>
     <string name="mode_reminder_title">步數來源提醒</string>

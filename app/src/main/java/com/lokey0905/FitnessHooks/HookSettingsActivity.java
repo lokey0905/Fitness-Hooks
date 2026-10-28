@@ -47,16 +47,16 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     private final List<MaterialButton> adjustmentButtons = new ArrayList<>();
     private MaterialSwitch sdkHookSwitch;
-    private MaterialSwitch uExtensionHookSwitch;
+    private MaterialSwitch standaloneHcSwitch;
     private MaterialSwitch stepHookSwitch;
     private TextView sdkHookSummary;
-    private TextView uExtensionHookSummary;
+    private TextView standaloneHcSummary;
     private TextInputLayout stepCountLayout;
     private TextInputEditText stepCountInput;
     private boolean sdkHookAllowed;
     private boolean changingSdkHook;
-    private boolean uExtensionHookAllowed;
-    private boolean changingUExtensionHook;
+    private boolean standaloneHcAllowed;
+    private boolean changingStandaloneHc;
     private boolean recreatingForTheme;
     private final HealthConnectSteps healthConnect = new HealthConnectSteps();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -115,10 +115,10 @@ public final class HookSettingsActivity extends ComponentActivity {
             return false;
         });
         sdkHookSwitch = findViewById(R.id.sdk_hook_switch);
-        uExtensionHookSwitch = findViewById(R.id.u_extension_hook_switch);
+        standaloneHcSwitch = findViewById(R.id.standalone_hc_switch);
         stepHookSwitch = findViewById(R.id.step_hook_switch);
         sdkHookSummary = findViewById(R.id.sdk_hook_summary);
-        uExtensionHookSummary = findViewById(R.id.u_extension_hook_summary);
+        standaloneHcSummary = findViewById(R.id.standalone_hc_summary);
         stepCountLayout = findViewById(R.id.step_count_layout);
         stepCountInput = findViewById(R.id.step_count_input);
         modeGroup = findViewById(R.id.step_mode_group);
@@ -141,8 +141,8 @@ public final class HookSettingsActivity extends ComponentActivity {
                 (button, checked) -> updateModeViews()
         );
         sdkHookSwitch.setOnCheckedChangeListener((button, checked) -> saveSdkHookChoice(checked));
-        uExtensionHookSwitch.setOnCheckedChangeListener(
-                (button, checked) -> saveUExtensionHookChoice(checked));
+        standaloneHcSwitch.setOnCheckedChangeListener(
+                (button, checked) -> saveStandaloneHcChoice(checked));
         saveButton.setOnClickListener(view -> saveSettings(false));
         findViewById(R.id.health_action).setOnClickListener(view -> healthAction());
         findViewById(R.id.health_settings).setOnClickListener(
@@ -196,10 +196,12 @@ public final class HookSettingsActivity extends ComponentActivity {
                 HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS);
         bindPreferenceSwitch(content.findViewById(R.id.experimental_features_switch),
                 HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED,
-                HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED, this::refreshEnvironment);
+                HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED, () -> !busy && !restoringSync,
+                () -> refreshProviderChoice(Build.VERSION.SDK_INT >= 34 && preferences().getBoolean(
+                        HookConfig.KEY_STANDALONE_HC_ENABLED, HookConfig.DEFAULT_STANDALONE_HC_ENABLED)));
         bindPreferenceSwitch(content.findViewById(R.id.disable_dynamic_colors_switch),
                 HookConfig.KEY_DISABLE_DYNAMIC_COLORS,
-                HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS, () -> {});
+                HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS, () -> true, () -> {});
         showSettingsDialog(new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.app_settings_title)
                 .setView(content)
@@ -214,14 +216,15 @@ public final class HookSettingsActivity extends ComponentActivity {
     }
 
     private void bindPreferenceSwitch(MaterialSwitch toggle, String key, boolean defaultValue,
-            Runnable onChanged) {
+            BooleanSupplier canChange, Runnable onChanged) {
         toggle.setChecked(preferences().getBoolean(key, defaultValue));
+        toggle.setEnabled(canChange.getAsBoolean());
         boolean[] restoring = {false};
         toggle.setOnCheckedChangeListener((button, checked) -> {
             if (restoring[0]) {
                 return;
             }
-            if (persistBooleanChoice(key, defaultValue, checked)) {
+            if (canChange.getAsBoolean() && persistBooleanChoice(key, defaultValue, checked)) {
                 onChanged.run();
             } else {
                 restoring[0] = true;
@@ -305,7 +308,7 @@ public final class HookSettingsActivity extends ComponentActivity {
             restoringSync = state.getBoolean("sync_pending", false);
         }
         setSdkHookChecked(snapshot.sdkHookEnabled);
-        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
+        setStandaloneHcChecked(snapshot.standaloneHcEnabled);
         stepHookSwitch.setChecked(preferences().getBoolean(
                 HookConfig.KEY_STEP_HOOK_ENABLED, HookConfig.DEFAULT_STEP_HOOK_ENABLED
         ));
@@ -366,16 +369,16 @@ public final class HookSettingsActivity extends ComponentActivity {
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         changingSdkHook = true;
-        changingUExtensionHook = true;
+        changingStandaloneHc = true;
         try {
             super.onRestoreInstanceState(savedInstanceState);
         } finally {
             changingSdkHook = false;
-            changingUExtensionHook = false;
+            changingStandaloneHc = false;
         }
         HookConfig.Snapshot snapshot = ConfigTransport.readModuleSettings(this);
         setSdkHookChecked(snapshot.sdkHookEnabled);
-        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
+        setStandaloneHcChecked(snapshot.standaloneHcEnabled);
         // Drafts carry their original hour; restored view text must not undo rollover handling.
         stepCountInput.setText(healthMode() ? healthDraft : recordingDraft);
         refreshHour();
@@ -470,13 +473,11 @@ public final class HookSettingsActivity extends ComponentActivity {
                 HookConfig.KEY_SDK_HOOK_ENABLED, HookConfig.DEFAULT_SDK_HOOK_ENABLED));
         sdkHookSummary.setText(Build.VERSION.SDK_INT >= 34 ? R.string.sdk_hook_unavailable
                 : sdkHookAllowed ? R.string.sdk_hook_summary : R.string.sdk_hook_requires_health);
-        uExtensionHookAllowed = experimentalFeaturesEnabled() && Build.VERSION.SDK_INT >= 34
-                && availability == HealthConnectSteps.Availability.AVAILABLE;
+        standaloneHcAllowed = experimentalFeaturesEnabled() && Build.VERSION.SDK_INT >= 34;
         HookConfig.Snapshot snapshot = ConfigTransport.readModuleSettings(this);
-        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
-        uExtensionHookSummary.setText(Build.VERSION.SDK_INT < 34 ? R.string.u_extension_hook_older_android
-                : availability == HealthConnectSteps.Availability.AVAILABLE
-                        ? R.string.u_extension_hook_summary : R.string.u_extension_hook_requires_health);
+        setStandaloneHcChecked(snapshot.standaloneHcEnabled);
+        standaloneHcSummary.setText(Build.VERSION.SDK_INT < 34 ? R.string.standalone_hc_older_android
+                : R.string.standalone_hc_summary);
         ConfigTransport.publishToTarget(this, snapshot);
         refreshCompatibilityChecks();
         updateModeViews();
@@ -565,27 +566,36 @@ public final class HookSettingsActivity extends ComponentActivity {
                 HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED);
     }
 
-    private void setUExtensionHookChecked(boolean checked) {
-        changingUExtensionHook = true;
+    private void setStandaloneHcChecked(boolean checked) {
+        changingStandaloneHc = true;
         try {
-            uExtensionHookSwitch.setChecked(checked);
+            standaloneHcSwitch.setChecked(checked);
         } finally {
-            changingUExtensionHook = false;
+            changingStandaloneHc = false;
         }
     }
 
-    private void saveUExtensionHookChoice(boolean checked) {
-        if (changingUExtensionHook) {
+    private void saveStandaloneHcChoice(boolean checked) {
+        if (changingStandaloneHc) {
             return;
         }
-        if (!uExtensionHookAllowed || busy || restoringSync) {
-            setUExtensionHookChecked(ConfigTransport.readModuleSettings(this).uExtensionHookEnabled);
+        if (!standaloneHcAllowed || busy || restoringSync) {
+            setStandaloneHcChecked(ConfigTransport.readModuleSettings(this).standaloneHcEnabled);
             updateModeViews();
             return;
         }
-        persistBooleanChoice(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED,
-                HookConfig.DEFAULT_U_EXTENSION_HOOK_ENABLED, checked);
+        boolean saved = persistBooleanChoice(HookConfig.KEY_STANDALONE_HC_ENABLED,
+                HookConfig.DEFAULT_STANDALONE_HC_ENABLED, checked);
+        refreshProviderChoice(saved);
+    }
+
+    private void refreshProviderChoice(boolean notifyRestart) {
+        // Changing providers never submits or discards either mode's step draft.
+        rememberDraft();
         refreshEnvironment();
+        if (notifyRestart) {
+            Toast.makeText(this, R.string.standalone_hc_restart, Toast.LENGTH_LONG).show();
+        }
     }
 
     @SuppressLint("ApplySharedPref") // Persist both the choice and any rollback before returning to the UI.
@@ -658,15 +668,21 @@ public final class HookSettingsActivity extends ComponentActivity {
         findViewById(R.id.recording_controls).setVisibility(health ? View.GONE : View.VISIBLE);
         findViewById(R.id.health_hour).setVisibility(health ? View.VISIBLE : View.GONE);
         findViewById(R.id.health_step_explanation).setVisibility(health ? View.VISIBLE : View.GONE);
-        findViewById(R.id.u_extension_hook_card).setVisibility(
+        findViewById(R.id.standalone_hc_card).setVisibility(
                 experimentalFeaturesEnabled() ? View.VISIBLE : View.GONE);
         findViewById(R.id.module_status_card).setVisibility(
-                !isModuleActive() && (!health || sdkHookSwitch.isChecked() || uExtensionHookSwitch.isChecked())
+                !isModuleActive() && (!health || sdkHookSwitch.isChecked() || standaloneHcSwitch.isChecked())
                         ? View.VISIBLE : View.GONE
         );
         boolean working = busy || restoringSync;
         sdkHookSwitch.setEnabled(sdkHookAllowed && !working);
-        uExtensionHookSwitch.setEnabled(uExtensionHookAllowed && !working);
+        standaloneHcSwitch.setEnabled(standaloneHcAllowed && !working);
+        for (AlertDialog dialog : settingsDialogs) {
+            MaterialSwitch experimental = dialog.findViewById(R.id.experimental_features_switch);
+            if (experimental != null) {
+                experimental.setEnabled(!working);
+            }
+        }
         stepHookSwitch.setEnabled(!working);
         findViewById(R.id.mode_recording).setEnabled(!working);
         findViewById(R.id.mode_health).setEnabled(!working);
@@ -693,19 +709,24 @@ public final class HookSettingsActivity extends ComponentActivity {
     }
 
     private boolean downloadAvailable() {
-        return Build.VERSION.SDK_INT < 34 && (availability == HealthConnectSteps.Availability.INSTALL_REQUIRED
+        return (Build.VERSION.SDK_INT < 34 || ConfigTransport.readModuleSettings(this).standaloneHcEnabled)
+                && (availability == HealthConnectSteps.Availability.INSTALL_REQUIRED
                 || availability == HealthConnectSteps.Availability.UPDATE_REQUIRED);
     }
 
     private int availabilityMessage() {
+        boolean standalone = ConfigTransport.readModuleSettings(this).standaloneHcEnabled;
         if (availability == HealthConnectSteps.Availability.INSTALL_REQUIRED) {
-            return R.string.health_missing;
+            return standalone ? R.string.standalone_hc_missing : R.string.health_missing;
         }
         if (availability == HealthConnectSteps.Availability.UPDATE_REQUIRED) {
-            return R.string.health_update_required;
+            return standalone ? R.string.standalone_hc_update_required : R.string.health_update_required;
         }
         if (availability == HealthConnectSteps.Availability.WORK_PROFILE_UNSUPPORTED) {
             return R.string.health_work_profile_unsupported;
+        }
+        if (standalone) {
+            return R.string.standalone_hc_unavailable;
         }
         return availability == HealthConnectSteps.Availability.PROFILE_UNSUPPORTED
                 ? R.string.health_profile_unsupported : R.string.health_unavailable;

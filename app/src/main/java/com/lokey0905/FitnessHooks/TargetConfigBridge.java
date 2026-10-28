@@ -70,7 +70,7 @@ final class TargetConfigBridge {
                     );
                     FitnessHooksEntry.log("target config received; saved=" + saved
                             + "; sdk=" + snapshot.sdkHookEnabled
-                            + "; uExtension=" + snapshot.uExtensionHookEnabled
+                            + "; standaloneHc=" + snapshot.standaloneHcEnabled
                             + "; steps=" + snapshot.stepHookEnabled
                             + "; count=" + snapshot.stepCount);
                 }

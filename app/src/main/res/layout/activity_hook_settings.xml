@@ -338,7 +338,7 @@
                 </com.google.android.material.card.MaterialCardView>
 
                 <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/u_extension_hook_card"
+                    android:id="@+id/standalone_hc_card"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginBottom="12dp"
@@ -365,24 +365,24 @@
                             <TextView
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:text="@string/u_extension_hook"
+                                android:text="@string/standalone_hc"
                                 android:textAppearance="?attr/textAppearanceTitleMedium" />
 
                             <TextView
-                                android:id="@+id/u_extension_hook_summary"
+                                android:id="@+id/standalone_hc_summary"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="4dp"
-                                android:text="@string/u_extension_hook_summary"
+                                android:text="@string/standalone_hc_summary"
                                 android:textAppearance="?attr/textAppearanceBodySmall"
                                 android:textColor="?attr/colorOnSurfaceVariant" />
                         </LinearLayout>
 
                         <com.google.android.material.materialswitch.MaterialSwitch
-                            android:id="@+id/u_extension_hook_switch"
+                            android:id="@+id/standalone_hc_switch"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:contentDescription="@string/u_extension_hook" />
+                            android:contentDescription="@string/standalone_hc" />
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
