@@ -17,7 +17,9 @@ public final class FitnessHooksEntry implements IXposedHookLoadPackage {
         if (MODULE_PACKAGE.equals(loadPackageParam.packageName)) {
             installActivationIndicator(loadPackageParam.classLoader);
             int selfSdkHooks = SdkGateHook.installSelf(loadPackageParam.classLoader);
-            log("module loaded; selfSdkHooks=" + selfSdkHooks);
+            int selfUExtensionHooks = UExtensionHook.installSelf(loadPackageParam.classLoader);
+            log("module loaded; selfSdkHooks=" + selfSdkHooks
+                    + "; selfUExtensionHooks=" + selfUExtensionHooks);
             return;
         }
 
@@ -27,9 +29,11 @@ public final class FitnessHooksEntry implements IXposedHookLoadPackage {
 
         int configBridgeHooks = TargetConfigBridge.install();
         int sdkHooks = SdkGateHook.install(loadPackageParam.classLoader);
+        int uExtensionHooks = UExtensionHook.install(loadPackageParam.classLoader);
         int stepHooks = RecordingStepHook.install(loadPackageParam.classLoader);
         log("target loaded; configBridgeHooks=" + configBridgeHooks
                 + "; sdkHooks=" + sdkHooks
+                + "; uExtensionHooks=" + uExtensionHooks
                 + "; stepHooks=" + stepHooks);
     }
 

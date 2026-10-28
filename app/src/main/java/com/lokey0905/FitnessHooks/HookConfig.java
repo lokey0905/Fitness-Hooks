@@ -7,6 +7,9 @@ import java.lang.reflect.Method;
 final class HookConfig {
     static final String PREFS_NAME = "hook_config";
     static final String KEY_SDK_HOOK_ENABLED = "sdk_hook_enabled";
+    static final String KEY_EXPERIMENTAL_FEATURES_ENABLED = "experimental_features_enabled";
+    static final String KEY_U_EXTENSION_HOOK_ENABLED = "u_extension_hook_enabled";
+    static final String KEY_DISABLE_DYNAMIC_COLORS = "disable_dynamic_colors";
     static final String KEY_STEP_HOOK_ENABLED = "step_hook_enabled";
     static final String KEY_STEP_COUNT = "step_count";
     static final String KEY_STEP_MODE = "step_mode";
@@ -16,6 +19,9 @@ final class HookConfig {
     static final String KEY_HEALTH_STEP_COUNT = "health_step_count";
     static final String KEY_HEALTH_STEP_HOUR = "health_step_hour";
     static final boolean DEFAULT_SDK_HOOK_ENABLED = true;
+    static final boolean DEFAULT_EXPERIMENTAL_FEATURES_ENABLED = false;
+    static final boolean DEFAULT_U_EXTENSION_HOOK_ENABLED = false;
+    static final boolean DEFAULT_DISABLE_DYNAMIC_COLORS = false;
     static final boolean DEFAULT_STEP_HOOK_ENABLED = false;
     static final int DEFAULT_STEP_COUNT = 1000;
     static final int MAX_STEP_COUNT = 1_000_000;
@@ -68,6 +74,7 @@ final class HookConfig {
 
     private static void logConfigIfChanged(Snapshot snapshot) {
         String summary = "sdk=" + snapshot.sdkHookEnabled
+                + "; uExtension=" + snapshot.uExtensionHookEnabled
                 + "; steps=" + snapshot.stepHookEnabled
                 + "; count=" + snapshot.stepCount;
         if (!summary.equals(lastLoggedConfig)) {
@@ -83,6 +90,7 @@ final class HookConfig {
     private static Snapshot defaults() {
         return new Snapshot(
                 false,
+                false,
                 DEFAULT_STEP_HOOK_ENABLED,
                 DEFAULT_STEP_COUNT
         );
@@ -90,11 +98,18 @@ final class HookConfig {
 
     static final class Snapshot {
         final boolean sdkHookEnabled;
+        final boolean uExtensionHookEnabled;
         final boolean stepHookEnabled;
         final int stepCount;
 
         Snapshot(boolean sdkHookEnabled, boolean stepHookEnabled, int stepCount) {
+            this(sdkHookEnabled, false, stepHookEnabled, stepCount);
+        }
+
+        Snapshot(boolean sdkHookEnabled, boolean uExtensionHookEnabled,
+                boolean stepHookEnabled, int stepCount) {
             this.sdkHookEnabled = sdkHookEnabled;
+            this.uExtensionHookEnabled = uExtensionHookEnabled;
             this.stepHookEnabled = stepHookEnabled;
             this.stepCount = stepCount;
         }

@@ -47,12 +47,17 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     private final List<MaterialButton> adjustmentButtons = new ArrayList<>();
     private MaterialSwitch sdkHookSwitch;
+    private MaterialSwitch uExtensionHookSwitch;
     private MaterialSwitch stepHookSwitch;
     private TextView sdkHookSummary;
+    private TextView uExtensionHookSummary;
     private TextInputLayout stepCountLayout;
     private TextInputEditText stepCountInput;
     private boolean sdkHookAllowed;
     private boolean changingSdkHook;
+    private boolean uExtensionHookAllowed;
+    private boolean changingUExtensionHook;
+    private boolean recreatingForTheme;
     private final HealthConnectSteps healthConnect = new HealthConnectSteps();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private MaterialButtonToggleGroup modeGroup;
@@ -87,7 +92,10 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        DynamicColors.applyToActivityIfAvailable(this);
+        if (!preferences().getBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS,
+                HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS)) {
+            DynamicColors.applyToActivityIfAvailable(this);
+        }
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_hook_settings);
 
@@ -96,6 +104,10 @@ public final class HookSettingsActivity extends ComponentActivity {
                 getString(R.string.settings_title_version, BuildConfig.VERSION_NAME)
         );
         toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_settings) {
+                showAppSettingsDialog();
+                return true;
+            }
             if (item.getItemId() == R.id.action_about) {
                 showAboutDialog();
                 return true;
@@ -103,8 +115,10 @@ public final class HookSettingsActivity extends ComponentActivity {
             return false;
         });
         sdkHookSwitch = findViewById(R.id.sdk_hook_switch);
+        uExtensionHookSwitch = findViewById(R.id.u_extension_hook_switch);
         stepHookSwitch = findViewById(R.id.step_hook_switch);
         sdkHookSummary = findViewById(R.id.sdk_hook_summary);
+        uExtensionHookSummary = findViewById(R.id.u_extension_hook_summary);
         stepCountLayout = findViewById(R.id.step_count_layout);
         stepCountInput = findViewById(R.id.step_count_input);
         modeGroup = findViewById(R.id.step_mode_group);
@@ -127,6 +141,8 @@ public final class HookSettingsActivity extends ComponentActivity {
                 (button, checked) -> updateModeViews()
         );
         sdkHookSwitch.setOnCheckedChangeListener((button, checked) -> saveSdkHookChoice(checked));
+        uExtensionHookSwitch.setOnCheckedChangeListener(
+                (button, checked) -> saveUExtensionHookChoice(checked));
         saveButton.setOnClickListener(view -> saveSettings(false));
         findViewById(R.id.health_action).setOnClickListener(view -> healthAction());
         findViewById(R.id.health_settings).setOnClickListener(
@@ -174,18 +190,69 @@ public final class HookSettingsActivity extends ComponentActivity {
                 .setPositiveButton(R.string.about_close, null));
     }
 
+    private void showAppSettingsDialog() {
+        View content = getLayoutInflater().inflate(R.layout.dialog_app_settings, null);
+        boolean initiallyDisabled = preferences().getBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS,
+                HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS);
+        bindPreferenceSwitch(content.findViewById(R.id.experimental_features_switch),
+                HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED,
+                HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED, this::refreshEnvironment);
+        bindPreferenceSwitch(content.findViewById(R.id.disable_dynamic_colors_switch),
+                HookConfig.KEY_DISABLE_DYNAMIC_COLORS,
+                HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS, () -> {});
+        showSettingsDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.app_settings_title)
+                .setView(content)
+                .setPositiveButton(R.string.app_settings_done, null), () -> {
+                    boolean disabled = preferences().getBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS,
+                            HookConfig.DEFAULT_DISABLE_DYNAMIC_COLORS);
+                    if (disabled != initiallyDisabled && !destroying && !isFinishing() && !isDestroyed()) {
+                        recreatingForTheme = true;
+                        recreate();
+                    }
+                });
+    }
+
+    private void bindPreferenceSwitch(MaterialSwitch toggle, String key, boolean defaultValue,
+            Runnable onChanged) {
+        toggle.setChecked(preferences().getBoolean(key, defaultValue));
+        boolean[] restoring = {false};
+        toggle.setOnCheckedChangeListener((button, checked) -> {
+            if (restoring[0]) {
+                return;
+            }
+            if (persistBooleanChoice(key, defaultValue, checked)) {
+                onChanged.run();
+            } else {
+                restoring[0] = true;
+                try {
+                    toggle.setChecked(preferences().getBoolean(key, defaultValue));
+                } finally {
+                    restoring[0] = false;
+                }
+            }
+        });
+    }
+
     private void showSettingsDialog(MaterialAlertDialogBuilder builder) {
+        showSettingsDialog(builder, null);
+    }
+
+    private void showSettingsDialog(MaterialAlertDialogBuilder builder, Runnable afterDismiss) {
         AlertDialog dialog = builder.create();
         settingsDialogs.add(dialog);
         dialog.setOnDismissListener(ignored -> {
             settingsDialogs.remove(dialog);
+            if (afterDismiss != null) {
+                afterDismiss.run();
+            }
             handler.post(this::maybeShowUpdate);
         });
         dialog.show();
     }
 
     private void maybeShowUpdate() {
-        if (!resumed || destroying || isFinishing() || isDestroyed()
+        if (!resumed || destroying || recreatingForTheme || isFinishing() || isDestroyed()
                 || startupReminderPending || !settingsDialogs.isEmpty()
                 || updateDialog != null || busy || restoringSync || updates == null) {
             return;
@@ -238,6 +305,7 @@ public final class HookSettingsActivity extends ComponentActivity {
             restoringSync = state.getBoolean("sync_pending", false);
         }
         setSdkHookChecked(snapshot.sdkHookEnabled);
+        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
         stepHookSwitch.setChecked(preferences().getBoolean(
                 HookConfig.KEY_STEP_HOOK_ENABLED, HookConfig.DEFAULT_STEP_HOOK_ENABLED
         ));
@@ -298,12 +366,16 @@ public final class HookSettingsActivity extends ComponentActivity {
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         changingSdkHook = true;
+        changingUExtensionHook = true;
         try {
             super.onRestoreInstanceState(savedInstanceState);
         } finally {
             changingSdkHook = false;
+            changingUExtensionHook = false;
         }
-        setSdkHookChecked(ConfigTransport.readModuleSettings(this).sdkHookEnabled);
+        HookConfig.Snapshot snapshot = ConfigTransport.readModuleSettings(this);
+        setSdkHookChecked(snapshot.sdkHookEnabled);
+        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
         // Drafts carry their original hour; restored view text must not undo rollover handling.
         stepCountInput.setText(healthMode() ? healthDraft : recordingDraft);
         refreshHour();
@@ -398,7 +470,14 @@ public final class HookSettingsActivity extends ComponentActivity {
                 HookConfig.KEY_SDK_HOOK_ENABLED, HookConfig.DEFAULT_SDK_HOOK_ENABLED));
         sdkHookSummary.setText(Build.VERSION.SDK_INT >= 34 ? R.string.sdk_hook_unavailable
                 : sdkHookAllowed ? R.string.sdk_hook_summary : R.string.sdk_hook_requires_health);
-        ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
+        uExtensionHookAllowed = experimentalFeaturesEnabled() && Build.VERSION.SDK_INT >= 34
+                && availability == HealthConnectSteps.Availability.AVAILABLE;
+        HookConfig.Snapshot snapshot = ConfigTransport.readModuleSettings(this);
+        setUExtensionHookChecked(snapshot.uExtensionHookEnabled);
+        uExtensionHookSummary.setText(Build.VERSION.SDK_INT < 34 ? R.string.u_extension_hook_older_android
+                : availability == HealthConnectSteps.Availability.AVAILABLE
+                        ? R.string.u_extension_hook_summary : R.string.u_extension_hook_requires_health);
+        ConfigTransport.publishToTarget(this, snapshot);
         refreshCompatibilityChecks();
         updateModeViews();
         int generation = ++statusGeneration;
@@ -458,31 +537,20 @@ public final class HookSettingsActivity extends ComponentActivity {
         }
     }
 
-    @SuppressLint("ApplySharedPref") // Persist both the choice and any rollback before returning to the UI.
     private void saveSdkHookChoice(boolean checked) {
         if (changingSdkHook) {
             return;
         }
-        SharedPreferences preferences = preferences();
-        boolean hadSavedChoice = preferences.contains(HookConfig.KEY_SDK_HOOK_ENABLED);
-        boolean previous = preferences.getBoolean(
+        boolean previous = preferences().getBoolean(
                 HookConfig.KEY_SDK_HOOK_ENABLED, HookConfig.DEFAULT_SDK_HOOK_ENABLED);
         if (!sdkHookAllowed || busy || restoringSync) {
             setSdkHookChecked(sdkHookAllowed && previous);
             updateModeViews();
             return;
         }
-        if (!preferences.edit().putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, checked).commit()) {
-            // A failed commit may already have changed the in-memory preference value.
-            SharedPreferences.Editor rollback = preferences.edit();
-            if (hadSavedChoice) {
-                rollback.putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, previous);
-            } else {
-                rollback.remove(HookConfig.KEY_SDK_HOOK_ENABLED);
-            }
-            rollback.commit();
+        if (!persistBooleanChoice(HookConfig.KEY_SDK_HOOK_ENABLED,
+                HookConfig.DEFAULT_SDK_HOOK_ENABLED, checked)) {
             setSdkHookChecked(previous);
-            Toast.makeText(this, R.string.save_failed, Toast.LENGTH_LONG).show();
             updateModeViews();
             refreshCompatibilityChecks();
             return;
@@ -490,6 +558,54 @@ public final class HookSettingsActivity extends ComponentActivity {
         ConfigTransport.publishToTarget(this, ConfigTransport.readModuleSettings(this));
         updateModeViews();
         refreshCompatibilityChecks();
+    }
+
+    private boolean experimentalFeaturesEnabled() {
+        return preferences().getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED,
+                HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED);
+    }
+
+    private void setUExtensionHookChecked(boolean checked) {
+        changingUExtensionHook = true;
+        try {
+            uExtensionHookSwitch.setChecked(checked);
+        } finally {
+            changingUExtensionHook = false;
+        }
+    }
+
+    private void saveUExtensionHookChoice(boolean checked) {
+        if (changingUExtensionHook) {
+            return;
+        }
+        if (!uExtensionHookAllowed || busy || restoringSync) {
+            setUExtensionHookChecked(ConfigTransport.readModuleSettings(this).uExtensionHookEnabled);
+            updateModeViews();
+            return;
+        }
+        persistBooleanChoice(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED,
+                HookConfig.DEFAULT_U_EXTENSION_HOOK_ENABLED, checked);
+        refreshEnvironment();
+    }
+
+    @SuppressLint("ApplySharedPref") // Persist both the choice and any rollback before returning to the UI.
+    private boolean persistBooleanChoice(String key, boolean defaultValue, boolean checked) {
+        SharedPreferences preferences = preferences();
+        boolean hadSavedChoice = preferences.contains(key);
+        boolean previous = preferences.getBoolean(key, defaultValue);
+        if (preferences.edit().putBoolean(key, checked).commit()) {
+            return true;
+        }
+        // A failed commit may already have changed the in-memory preference value.
+        SharedPreferences.Editor rollback = preferences.edit();
+        if (hadSavedChoice) {
+            rollback.putBoolean(key, previous);
+        } else {
+            rollback.remove(key);
+        }
+        rollback.commit();
+        Toast.makeText(this, R.string.save_failed, Toast.LENGTH_LONG).show();
+        return false;
     }
 
     private void refreshCompatibilityChecks() {
@@ -542,11 +658,15 @@ public final class HookSettingsActivity extends ComponentActivity {
         findViewById(R.id.recording_controls).setVisibility(health ? View.GONE : View.VISIBLE);
         findViewById(R.id.health_hour).setVisibility(health ? View.VISIBLE : View.GONE);
         findViewById(R.id.health_step_explanation).setVisibility(health ? View.VISIBLE : View.GONE);
+        findViewById(R.id.u_extension_hook_card).setVisibility(
+                experimentalFeaturesEnabled() ? View.VISIBLE : View.GONE);
         findViewById(R.id.module_status_card).setVisibility(
-                !isModuleActive() && (!health || sdkHookSwitch.isChecked()) ? View.VISIBLE : View.GONE
+                !isModuleActive() && (!health || sdkHookSwitch.isChecked() || uExtensionHookSwitch.isChecked())
+                        ? View.VISIBLE : View.GONE
         );
         boolean working = busy || restoringSync;
         sdkHookSwitch.setEnabled(sdkHookAllowed && !working);
+        uExtensionHookSwitch.setEnabled(uExtensionHookAllowed && !working);
         stepHookSwitch.setEnabled(!working);
         findViewById(R.id.mode_recording).setEnabled(!working);
         findViewById(R.id.mode_health).setEnabled(!working);

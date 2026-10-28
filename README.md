@@ -1,17 +1,18 @@
-# Fitness Hooks 2.2.1
+# Fitness Hooks 2.2.2
 
-An LSPosed module for Pikmin Bloom 153.0 with two independent hooks:
+An LSPosed module for Pikmin Bloom with independent compatibility and step hooks:
 
 - Android 13 Health Connect SDK-gate compatibility.
+- Experimental Android 14+ U Extension support-check compatibility.
 - Recording API on mobile step-result override.
 
 Package: `com.lokey0905.FitnessHooks`
 
-Version: `2.2.1` (`versionCode 6`, pre-release).
+Current source version: `2.2.2` (`versionCode 6`).
 
-The top-right About action shows the app icon, build version, author, and independent-project disclaimer.
+The top-right Settings action controls experimental features and dynamic colors. The About action shows the app icon, build version, author, and independent-project disclaimer.
 
-SDK compatibility is in the shared area above the mode selector. Health Connect authorization and settings use matching settings rows.
+Compatibility controls appear below the mode selector in Health Connect mode. Health Connect authorization and settings use matching settings rows.
 
 Inputs above 50,000 steps show a warning and require confirmation before saving or syncing. This is an input threshold, not a measurement of the user's daily total. [Pikmin Bloom's official seedling FAQ](https://niantic.helpshift.com/hc/zh-hant/23-pikmin-bloom/faq/3343-faq-about-seedlings/) limits steps reflected in planter-pack seedlings to 50,000 per day; this is not stated as a cap on all game step records. The UI also notes that the effects of time-zone changes on game step attribution and daily-limit resets are unverified.
 
@@ -48,7 +49,19 @@ On Android 13 and lower, the SDK hook can override:
 
 It preserves the real `Build.VERSION.SDK_INT`, allowing AndroidX Health Connect to retain its Android 13 provider selection. The SDK hook is not installed on Android 14 or later. With no saved preference, the setting defaults to on on supported Android 13-and-below devices with an available Health Connect provider; saved choices are preserved. It stays disabled when Health Connect is unavailable. The target-side fallback remains off until validated module settings arrive.
 
-The system information card keeps the real SDK and U Extension values. Its **local compatibility checks** run equivalents of Pikmin's `isSupported()` and `osSupportsHealthConnect()`: SDK 34+, an available Health Connect provider, and the background-read feature reported available. The module also hooks these local methods on Android 13 and lower using the same override callback and the app's saved, validated compatibility setting. Include Fitness Hooks in the LSPosed scope and restart it after enabling the module. Changing the SDK compatibility switch immediately saves the preference, publishes the effective setting, and refreshes the local checks. Temporary provider unavailability disables the effective override without erasing the saved preference. These checks do not read health records or request additional permissions. They show results in Fitness Hooks' own process, not confirmation that the separate Pikmin process was hooked or has its read permissions.
+The system information card keeps the real SDK and U Extension values. Its **local compatibility checks** run equivalents of Pikmin's `isSupported()` and `osSupportsHealthConnect()`: SDK 34+, an available Health Connect provider, and the background-read feature reported available. The module also hooks these local methods on Android 13 and lower using the same override callback and the app's saved, validated compatibility setting. Include Fitness Hooks in the LSPosed scope and restart it after enabling the module. The compatibility controls appear below the mode selector in Health Connect mode. Changing a compatibility switch immediately saves the preference, publishes the effective setting, and refreshes the local checks. Temporary provider unavailability disables the effective override without erasing the saved preference. These checks do not read health records or request additional permissions. They show results in Fitness Hooks' own process, not confirmation that the separate Pikmin process was hooked or has its read permissions.
+
+### Experimental U Extension compatibility
+
+Open Settings from the toolbar and enable **Experimental features** to show the U Extension compatibility switch in Health Connect mode. Both experimental features and the U Extension override default to off. The override requires Android 14 or later and an available Health Connect provider. Turning off experimental features disables the effective override while retaining the saved switch preference.
+
+During `FitnessClientHealthConnect.isSupported()` in Pikmin, or the equivalent local probe, the hook raises a successful `SdkExtensions.getExtensionVersion(34)` result from 0–12 to 13. Values of 13 or higher remain unchanged. Queries outside that method, other extension levels, and API failures keep their original behavior. `osSupportsHealthConnect()` delegates to `isSupported()`. The hook preserves provider/profile checks, client initialization and permission checks, and does not change system properties or the Android SDK version.
+
+This is an experimental support-check override, not an implementation of missing platform features. Android 13 uses the standalone provider and the existing SDK gate override; success there does not establish that an older Android 14 framework provider supports the required background-read behavior. Device compatibility for the U Extension override has not been verified.
+
+### Appearance settings
+
+Settings also offers **Disable dynamic colors**. Dynamic colors remain enabled by default when supported; disabling them uses the app's own theme. The preference is saved immediately and the screen is recreated when the settings dialog closes to apply a changed appearance.
 
 ### Recording steps
 
@@ -67,26 +80,26 @@ The setting controls the bucket total, not a guaranteed increment on every query
 ## Requirements
 
 - LSPosed or a compatible Xposed framework for the hook features; direct Health Connect sync does not need LSPosed
-- Pikmin Bloom 153.0
+- Pikmin Bloom with the matching client methods (original hooks inspected in 153.0; HC support checks also inspected in 156.0)
 - For the SDK hook: Android 13 with the standalone Health Connect provider and permissions
 - For the step hook: Pikmin must select `RECORDING_API_ON_MOBILE`
 
 ## Installation
 
 1. Install the module APK.
-2. Open the module app and configure the two hooks.
+2. Open the module app and configure the desired mode and compatibility options.
 3. Enable it in LSPosed.
 4. Add both Fitness Hooks and Pikmin Bloom to the LSPosed scope.
 5. Force-stop and restart both apps.
 
 The Material 3 settings screen provides quick `+/- 1`, `10`, `100`, `500`, `1000`, and `5000` adjustments. It displays an activation warning when the module app process is not injected by LSPosed. On Android 14 and later, the Android 13 SDK compatibility option is disabled and always synchronized as off.
 
-The expected LSPosed log includes:
+Example LSPosed logs for Android 13 with SDK and Recording hooks enabled:
 
 ```text
-FitnessHooks: target loaded; configBridgeHooks=1; sdkHooks=2; stepHooks=1
-FitnessHooks: target config received; saved=true; sdk=true; steps=true; count=6000
-FitnessHooks: config loaded from target storage; sdk=true; steps=true; count=6000
+FitnessHooks: target loaded; configBridgeHooks=1; sdkHooks=2; uExtensionHooks=0; stepHooks=1
+FitnessHooks: target config received; saved=true; sdk=true; uExtension=false; steps=true; count=6000
+FitnessHooks: config loaded from target storage; sdk=true; uExtension=false; steps=true; count=6000
 FitnessHooks: Recording step override active; steps=6000
 ```
 
@@ -123,7 +136,7 @@ The local `app/libs/xposed-api-stubs.jar` dependency is `compileOnly` and is not
 
 ## Compatibility Notes
 
-- The hook targets names and signatures observed in Pikmin Bloom 153.0. Later releases may rename or remove them.
+- The original hooks target names and signatures observed in Pikmin Bloom 153.0. The U Extension hook targets the HC support check inspected in 156.0. Later releases may rename or remove these methods.
 - A successful SDK hook does not prove that the Health Connect provider is installed, available, or authorized.
 - A successful step hook proves only that Pikmin received the replacement protobuf; it does not prove server acceptance or the awarded delta.
 - Settings are per Android user. Configure the module in the same user/profile that runs Pikmin.

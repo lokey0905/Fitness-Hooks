@@ -23,12 +23,17 @@ final class ConfigTransport {
                 HookConfig.KEY_STEP_MODE, HookConfig.DEFAULT_STEP_MODE
         ));
         boolean sdkEnabled = snapshot.sdkHookEnabled;
-        if (sdkEnabled) {
-            sdkEnabled = HealthConnectSteps.availability(context)
+        boolean uExtensionEnabled = snapshot.uExtensionHookEnabled
+                && preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED,
+                        HookConfig.DEFAULT_EXPERIMENTAL_FEATURES_ENABLED);
+        if (sdkEnabled || uExtensionEnabled) {
+            boolean healthAvailable = HealthConnectSteps.availability(context)
                     == HealthConnectSteps.Availability.AVAILABLE;
+            sdkEnabled &= healthAvailable;
+            uExtensionEnabled &= healthAvailable;
         }
         return new HookConfig.Snapshot(
-                sdkEnabled, !healthMode && snapshot.stepHookEnabled, snapshot.stepCount
+                sdkEnabled, uExtensionEnabled, !healthMode && snapshot.stepHookEnabled, snapshot.stepCount
         );
     }
 
@@ -43,6 +48,8 @@ final class ConfigTransport {
                         HookConfig.KEY_SDK_HOOK_ENABLED,
                         false
                 );
+        boolean uExtensionEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                && intent.getBooleanExtra(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false);
         boolean stepEnabled = intent.getBooleanExtra(
                 HookConfig.KEY_STEP_HOOK_ENABLED,
                 HookConfig.DEFAULT_STEP_HOOK_ENABLED
@@ -54,6 +61,7 @@ final class ConfigTransport {
         return context.getSharedPreferences(TARGET_PREFS_NAME, 0)
                 .edit()
                 .putBoolean(HookConfig.KEY_SDK_HOOK_ENABLED, sdkEnabled)
+                .putBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, uExtensionEnabled)
                 .putBoolean(HookConfig.KEY_STEP_HOOK_ENABLED, stepEnabled)
                 .putInt(HookConfig.KEY_STEP_COUNT, stepCount)
                 .commit();
@@ -63,6 +71,7 @@ final class ConfigTransport {
         Intent intent = new Intent(ACTION_APPLY_CONFIG)
                 .setPackage(TARGET_PACKAGE)
                 .putExtra(HookConfig.KEY_SDK_HOOK_ENABLED, snapshot.sdkHookEnabled)
+                .putExtra(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, snapshot.uExtensionHookEnabled)
                 .putExtra(HookConfig.KEY_STEP_HOOK_ENABLED, snapshot.stepHookEnabled)
                 .putExtra(HookConfig.KEY_STEP_COUNT, snapshot.stepCount);
         context.sendBroadcast(intent);
@@ -76,6 +85,9 @@ final class ConfigTransport {
                                 HookConfig.KEY_SDK_HOOK_ENABLED,
                                 defaultSdkHookEnabled
                         ),
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                        && preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED,
+                                HookConfig.DEFAULT_U_EXTENSION_HOOK_ENABLED),
                 preferences.getBoolean(
                         HookConfig.KEY_STEP_HOOK_ENABLED,
                         HookConfig.DEFAULT_STEP_HOOK_ENABLED

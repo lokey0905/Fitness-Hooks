@@ -3,9 +3,12 @@ package com.lokey0905.FitnessHooks;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -28,6 +31,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.color.DynamicColors;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 
@@ -63,6 +67,8 @@ public final class HookSettingsActivityTest {
         ProbeShadow.osSupported = false;
         ProbeShadow.supportFailure = null;
         ProbeShadow.osFailure = null;
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        DynamicColorsShadow.calls = 0;
         preferences = RuntimeEnvironment.getApplication()
                 .getSharedPreferences(HookConfig.PREFS_NAME, Context.MODE_PRIVATE);
         assertTrue(preferences.edit().clear()
@@ -319,6 +325,9 @@ public final class HookSettingsActivityTest {
 
         MaterialToolbar toolbar = activity.findViewById(R.id.toolbar);
         assertEquals("fitness hook " + BuildConfig.VERSION_NAME, toolbar.getTitle().toString());
+        assertTrue(toolbar.getMenu().findItem(R.id.action_settings).isVisible());
+        Drawable settingsIcon = toolbar.getMenu().findItem(R.id.action_settings).getIcon();
+        assertTrue(settingsIcon instanceof VectorDrawable || settingsIcon instanceof VectorDrawableCompat);
         assertTrue(toolbar.getMenu().findItem(R.id.action_about).isVisible());
         Drawable aboutIcon = toolbar.getMenu().findItem(R.id.action_about).getIcon();
         assertNotNull(aboutIcon);
@@ -387,22 +396,209 @@ public final class HookSettingsActivityTest {
 
     @Test
     @Config(sdk = {28, 33, 34}, qualifiers = "w320dp-h480dp")
-    public void sharedSdkControlPrecedesModeSelectorAndStaysVisible() {
+    public void compatibilityCardsFollowModeSelectorAndOnlyAppearForHealthConnect() {
         HookSettingsActivity activity = start(null);
         View common = activity.findViewById(R.id.common_controls);
+        ViewGroup health = activity.findViewById(R.id.health_controls);
         MaterialButtonToggleGroup mode = activity.findViewById(R.id.step_mode_group);
         ViewGroup content = (ViewGroup) common.getParent();
 
         assertEquals(content, mode.getParent());
         assertTrue(content.indexOfChild(common) < content.indexOfChild(mode));
-        assertNotNull(((ViewGroup) common).findViewById(R.id.sdk_hook_card));
-        assertTrue(activity.findViewById(R.id.sdk_hook_card).isShown());
+        assertTrue(content.indexOfChild(mode) < content.indexOfChild(health));
+        assertEquals(R.id.sdk_hook_card, health.getChildAt(0).getId());
+        assertNull(((ViewGroup) common).findViewById(R.id.sdk_hook_card));
+        assertFalse(activity.findViewById(R.id.sdk_hook_card).isShown());
+        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
 
         mode.check(R.id.mode_health);
 
         assertTrue(activity.findViewById(R.id.sdk_hook_card).isShown());
+        assertFalse(activity.findViewById(R.id.u_extension_hook_card).isShown());
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             assertFalse(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
+        }
+
+        mode.check(R.id.mode_recording);
+        assertFalse(activity.findViewById(R.id.sdk_hook_card).isShown());
+    }
+
+    @Test
+    @Config(sdk = {28, 33}, qualifiers = "w320dp-h480dp")
+    public void settingsDefaultOffAndExperimentalOptionDoesNotEnableUExtensionOnOlderAndroid() {
+        installHealthProvider(true);
+        assertTrue(preferences.edit().putString(HookConfig.KEY_STEP_MODE,
+                HookConfig.MODE_HEALTH_CONNECT).commit());
+        HookSettingsActivity activity = start(null);
+        AlertDialog dialog = openAppSettings(activity);
+        MaterialSwitch experimental = dialog.findViewById(R.id.experimental_features_switch);
+        MaterialSwitch colors = dialog.findViewById(R.id.disable_dynamic_colors_switch);
+        assertFalse(experimental.isChecked());
+        assertFalse(colors.isChecked());
+
+        experimental.performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false));
+        assertTrue(activity.findViewById(R.id.u_extension_hook_card).isShown());
+        assertFalse(activity.findViewById(R.id.u_extension_hook_switch).isEnabled());
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
+        assertEquals(activity.getString(R.string.u_extension_hook_older_android),
+                ((TextView) activity.findViewById(R.id.u_extension_hook_summary)).getText().toString());
+        assertTrue(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
+        dialog.dismiss();
+        destroyActivity();
+
+        activity = start(null);
+        dialog = openAppSettings(activity);
+        assertTrue(((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).isChecked());
+        assertTrue(activity.findViewById(R.id.u_extension_hook_card).isShown());
+    }
+
+    @Test
+    @Config(sdk = 34, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void experimentalMasterAndUExtensionChoicePersistWithoutErasingSavedIntent() {
+        assertTrue(preferences.edit().putString(HookConfig.KEY_STEP_MODE,
+                HookConfig.MODE_HEALTH_CONNECT).commit());
+        HookSettingsActivity activity = start(null);
+        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
+        AlertDialog dialog = openAppSettings(activity);
+        ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false));
+        dialog.dismiss();
+
+        MaterialSwitch extension = activity.findViewById(R.id.u_extension_hook_switch);
+        assertTrue(extension.isEnabled());
+        assertFalse(extension.isChecked());
+        assertFalse(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
+        // Compatibility choices do not require a valid step draft or pressing Sync.
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("invalid");
+        extension.performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
+        assertTrue(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        Bundle staleState = new Bundle();
+        controller.saveInstanceState(staleState);
+        extension.performClick();
+        assertFalse(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, true));
+        destroyActivity();
+
+        activity = start(staleState);
+        extension = activity.findViewById(R.id.u_extension_hook_switch);
+        assertFalse(extension.isChecked());
+        extension.performClick();
+        dialog = openAppSettings(activity);
+        ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
+        assertFalse(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
+        assertEquals(View.GONE, activity.findViewById(R.id.u_extension_hook_card).getVisibility());
+        dialog.dismiss();
+        destroyActivity();
+
+        activity = start(null);
+        assertFalse(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
+        dialog = openAppSettings(activity);
+        ((MaterialSwitch) dialog.findViewById(R.id.experimental_features_switch)).performClick();
+        assertTrue(((MaterialSwitch) activity.findViewById(R.id.u_extension_hook_switch)).isChecked());
+        assertTrue(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+        dialog.dismiss();
+        ((MaterialButtonToggleGroup) activity.findViewById(R.id.step_mode_group)).check(R.id.mode_recording);
+        assertFalse(activity.findViewById(R.id.u_extension_hook_card).isShown());
+    }
+
+    @Test
+    @Config(sdk = 34, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void unavailableHealthConnectDisablesUExtensionWithoutErasingChoice() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT)
+                .putBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, true)
+                .putBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, true).commit());
+        HookSettingsActivity activity = start(null);
+        MaterialSwitch extension = activity.findViewById(R.id.u_extension_hook_switch);
+        assertTrue(extension.isChecked());
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.PROFILE_UNSUPPORTED;
+        controller.pause().resume();
+        assertFalse(extension.isEnabled());
+        assertFalse(extension.isChecked());
+        assertTrue(preferences.getBoolean(HookConfig.KEY_U_EXTENSION_HOOK_ENABLED, false));
+        assertFalse(ConfigTransport.readModuleSettings(activity).uExtensionHookEnabled);
+
+        AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        controller.pause().resume();
+        assertTrue(extension.isEnabled());
+        assertTrue(extension.isChecked());
+    }
+
+    @Test
+    @Config(shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class,
+            DynamicColorsShadow.class})
+    public void dynamicColorPreferenceRecreatesAfterDialogDismissAndPreservesBothDrafts() {
+        HookSettingsActivity activity = start(null);
+        assertEquals(1, DynamicColorsShadow.calls);
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("1234");
+        ((MaterialButtonToggleGroup) activity.findViewById(R.id.step_mode_group)).check(R.id.mode_health);
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("5678");
+        AlertDialog dialog = openAppSettings(activity);
+        ((MaterialSwitch) dialog.findViewById(R.id.disable_dynamic_colors_switch)).performClick();
+        assertTrue(preferences.getBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS, false));
+        assertSame(activity, controller.get());
+
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        ShadowLooper.idleMainLooper();
+        HookSettingsActivity recreated = controller.get();
+        assertNotSame(activity, recreated);
+        assertEquals(1, DynamicColorsShadow.calls);
+        assertEquals("5678", ((TextInputEditText) recreated.findViewById(R.id.step_count_input))
+                .getText().toString());
+        ((MaterialButtonToggleGroup) recreated.findViewById(R.id.step_mode_group)).check(R.id.mode_recording);
+        assertEquals("1234", ((TextInputEditText) recreated.findViewById(R.id.step_count_input))
+                .getText().toString());
+
+        dialog = openAppSettings(recreated);
+        MaterialSwitch colors = dialog.findViewById(R.id.disable_dynamic_colors_switch);
+        assertTrue(colors.isChecked());
+        colors.performClick();
+        dialog.dismiss();
+        ShadowLooper.idleMainLooper();
+        assertNotSame(recreated, controller.get());
+        assertEquals(2, DynamicColorsShadow.calls);
+        assertFalse(preferences.getBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS, true));
+    }
+
+    @Test
+    @Config(shadows = DynamicColorsShadow.class)
+    public void healthPermissionsPageUsesTheSameDynamicColorPreference() {
+        try (ActivityController<HealthPermissionsActivity> privacy =
+                Robolectric.buildActivity(HealthPermissionsActivity.class).setup()) {
+            assertEquals(1, DynamicColorsShadow.calls);
+        }
+        assertTrue(preferences.edit().putBoolean(HookConfig.KEY_DISABLE_DYNAMIC_COLORS, true).commit());
+        try (ActivityController<HealthPermissionsActivity> privacy =
+                Robolectric.buildActivity(HealthPermissionsActivity.class).setup()) {
+            assertEquals(1, DynamicColorsShadow.calls);
+        }
+    }
+
+    @Implements(HealthConnectSteps.class)
+    public static final class AvailableHealthConnectShadow {
+        static HealthConnectSteps.Availability result;
+
+        @Implementation
+        protected static HealthConnectSteps.Availability availability(Context context) {
+            return result;
+        }
+
+        @Implementation
+        protected void checkPermission(Context context, HealthConnectSteps.Callback callback) {
+            callback.onResult(HealthConnectSteps.Result.READY);
+        }
+    }
+
+    @Implements(DynamicColors.class)
+    public static final class DynamicColorsShadow {
+        static int calls;
+
+        @Implementation
+        protected static void applyToActivityIfAvailable(Activity activity) {
+            calls++;
         }
     }
 
@@ -630,6 +826,16 @@ public final class HookSettingsActivityTest {
         if (ShadowDialog.getLatestDialog() != null) {
             ShadowDialog.getLatestDialog().dismiss();
         }
+    }
+
+    private AlertDialog openAppSettings(HookSettingsActivity activity) {
+        dismissStartupReminder();
+        MaterialToolbar toolbar = activity.findViewById(R.id.toolbar);
+        assertTrue(toolbar.getMenu().performIdentifierAction(R.id.action_settings, 0));
+        AlertDialog dialog = (AlertDialog) ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+        return dialog;
     }
 
     private HookSettingsActivity start(Bundle state) {

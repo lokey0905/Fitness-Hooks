@@ -25,6 +25,12 @@
     <string name="hc_probe_passed">通過</string>
     <string name="hc_probe_failed">未通過</string>
     <string name="hc_probe_unknown">無法判定</string>
+    <string name="app_settings_title">設定</string>
+    <string name="app_settings_done">完成</string>
+    <string name="experimental_features">啟用實驗性功能</string>
+    <string name="experimental_features_summary">顯示測試中的相容選項；關閉時停止套用並保留選擇。</string>
+    <string name="disable_dynamic_colors">停用動態色彩</string>
+    <string name="disable_dynamic_colors_summary">使用 App 原本配色；關閉此視窗後套用。</string>
     <string name="about_title">關於此 App</string>
     <string name="about_version_format">%1$s (%2$d)</string>
     <string name="about_info">Health Connect 手動步數同步與 LSPosed 模組設定工具。</string>
@@ -41,6 +47,10 @@
     <string name="sdk_hook_summary">僅用於 Android 13 以下的 Health Connect 相容處理；切換後立即儲存</string>
     <string name="sdk_hook_unavailable">Android 14 以上無須啟用</string>
     <string name="sdk_hook_requires_health">請先安裝並啟用 Health Connect；目前無法使用相容模式。</string>
+    <string name="u_extension_hook">U Extension 相容（實驗性）</string>
+    <string name="u_extension_hook_summary">適用 Android 14 以上。僅在 HC 支援檢查期間，將低於 13 的 API 回報提升至 13；不會補上系統功能，效果仍待驗證。切換後立即儲存。</string>
+    <string name="u_extension_hook_older_android">Android 13 以下請使用 Android 14 SDK 相容模式。</string>
+    <string name="u_extension_hook_requires_health">請先確認 Health Connect 可用，才能啟用此實驗功能。</string>
     <string name="mode_recording">Recording API</string>
     <string name="mode_health">Health Connect</string>
     <string name="mode_reminder_title">步數來源提醒</string>
