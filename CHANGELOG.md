@@ -1,9 +1,21 @@
 # Changelog
 
-## 2.2.1 (Pre-release) - 2026-10-23
+## 2.2.2 - 2026-11-05
+
+- Updated versionName to 2.2.2 and versionCode to 7.
+- Added real Android SDK / U Extension information and Health Connect compatibility checks matching Pikmin's `isSupported()` and `osSupportsHealthConnect()` gates.
+- Applied the pre-Android-14 SDK compatibility hook to the module's own checks and immediately persisted switch changes across app restarts.
+- Added settings for experimental features and disabling dynamic colors.
+- Added an opt-in, experimental standalone Health Connect APK route on Android 14 and later, covering module writes, Pikmin reads, permissions, and settings.
+- Replaced the unpublished U Extension override with explicit provider routing; system SDK and U Extension values remain unchanged.
+- Kept standalone provider failures visible without silently switching back to framework Health Connect. The standalone APK needs separate permissions, and system Health Connect data and permissions are not automatically transferred.
+- Require force-stopping and reopening Pikmin after switching providers. The standalone route has automated/static validation but has not completed device or background-read validation.
+- Moved compatibility controls below the Health Connect mode selector and placed time-zone information at the end of the time range.
+
+## 2.2.1 - 2026-10-23
 
 - Updated versionName to 2.2.1 and versionCode to 6.
-- Published as a pre-release for manual download; the stable-only startup updater in 2.2.0 does not notify for this release.
+- Initially published as a pre-release, then promoted to a stable release. The stable-only startup updater can notify older installed versions after promotion.
 - No runtime implementation changes relative to 2.2.0 are present in this source revision.
 
 ## 2.2.0 - 2026-10-11
