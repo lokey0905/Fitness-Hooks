@@ -2,7 +2,7 @@
 
 ## 2.2.2 - 2026-11-05
 
-- Updated versionName to 2.2.2 and versionCode to 7.
+- Updated versionName to 2.2.2 and retained versionCode 6.
 - Added real Android SDK / U Extension information and Health Connect compatibility checks matching Pikmin's `isSupported()` and `osSupportsHealthConnect()` gates.
 - Applied the pre-Android-14 SDK compatibility hook to the module's own checks and immediately persisted switch changes across app restarts.
 - Added settings for experimental features and disabling dynamic colors.
