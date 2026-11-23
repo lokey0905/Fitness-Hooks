@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.3 - 2026-11-23
+
+- Updated versionName to 2.2.3 and retained versionCode 6. Raised targetSdk from 33 to compileSdk 37; updated Material Components to 1.14.0 and AndroidX Activity to 1.13.0, retaining minSdk 28.
+- Extended the experimental standalone Health Connect route to the HC APK and Google Fit, including provider compatibility, Fit client/permission/settings routing, and separate synchronization state for each provider.
+- Fixed cold-start provider selection: missing or failed configuration stays pending instead of selecting system HC. Verified configuration is read through a caller-restricted provider, and generation checks prevent stale reads from replacing newer signed broadcasts.
+- Added a toolbar shortcut that offers App/system HC settings when the standalone APK is installed, without a provider-version allowlist.
+- Combined HC installation/update, write authorization, and step writing into one outlined Material 3 action card below the compatibility controls, with a secondary settings action. Authorization does not automatically write the draft.
+- Added system-bar, display-cutout, and keyboard inset handling to the settings and permission-rationale screens.
+- Added independent collapsible compatibility and App installation sections. Known failures or missing apps expand the corresponding section by default; manual choices survive screen recreation. Installation checks always list Fit, HC, and Pikmin; either a system HC service or standalone APK counts as installed.
+- App installation checks do not require a running or hooked target process. The App header has no result summary; lookup failures remain unknown.
+- The standalone route remains experimental: enable the HC/Fit LSPosed scopes, grant permissions separately, and restart HC, Fit, and Pikmin after switching providers. Hooks do not force or reschedule Google Fit synchronization, and this release does not establish a complete device/profile compatibility matrix.
+
 ## 2.2.2 - 2026-11-05
 
 - Updated versionName to 2.2.2 and retained versionCode 6.
