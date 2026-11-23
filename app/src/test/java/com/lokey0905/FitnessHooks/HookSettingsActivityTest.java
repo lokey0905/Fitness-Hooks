@@ -25,6 +25,10 @@ import android.widget.GridLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.ActionMenuView;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import com.google.android.material.appbar.MaterialToolbar;
@@ -49,6 +53,7 @@ import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowActivity;
+import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowDialog;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.shadows.ShadowPackageManager;
@@ -68,9 +73,12 @@ public final class HookSettingsActivityTest {
         ProbeShadow.supportFailure = null;
         ProbeShadow.osFailure = null;
         AvailableHealthConnectShadow.result = HealthConnectSteps.Availability.AVAILABLE;
+        AvailableHealthConnectShadow.permissionResult = HealthConnectSteps.Result.READY;
         AvailableHealthConnectShadow.deferPermission = false;
         AvailableHealthConnectShadow.pendingPermission = null;
         AvailableHealthConnectShadow.pendingSync = null;
+        AvailableHealthConnectShadow.permissionChecks = 0;
+        AvailableHealthConnectShadow.syncCalls = 0;
         DynamicColorsShadow.calls = 0;
         preferences = RuntimeEnvironment.getApplication()
                 .getSharedPreferences(HookConfig.PREFS_NAME, Context.MODE_PRIVATE);
@@ -387,11 +395,11 @@ public final class HookSettingsActivityTest {
 
         assertEquals(HealthConnectSteps.Availability.INSTALL_REQUIRED,
                 HealthConnectSteps.availability(activity));
-        assertFalse(activity.findViewById(R.id.save_button).isEnabled());
+        assertTrue(activity.findViewById(R.id.save_button).isEnabled());
         assertFalse(activity.findViewById(R.id.step_count_input).isEnabled());
         assertFalse(activity.findViewById(R.id.sdk_hook_switch).isEnabled());
         assertEquals(activity.getString(R.string.health_download),
-                ((TextView) activity.findViewById(R.id.health_action_title)).getText().toString());
+                ((TextView) activity.findViewById(R.id.save_button)).getText().toString());
         assertEquals(600, preferences.getInt(HookConfig.KEY_HEALTH_STEP_COUNT, -1));
         assertEquals(hour, preferences.getLong(HookConfig.KEY_HEALTH_STEP_HOUR, -1));
         assertNull(((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity());
@@ -526,15 +534,15 @@ public final class HookSettingsActivityTest {
         assertTrue(provider.isEnabled());
         assertTrue(provider.isChecked());
         assertTrue(ConfigTransport.readModuleSettings(activity).standaloneHcEnabled);
-        assertFalse(activity.findViewById(R.id.save_button).isEnabled());
+        assertTrue(activity.findViewById(R.id.save_button).isEnabled());
         assertEquals(activity.getString(R.string.standalone_hc_missing),
                 ((TextView) activity.findViewById(R.id.health_status)).getText().toString());
         assertEquals("5678", ((TextInputEditText) activity.findViewById(R.id.step_count_input))
                 .getText().toString());
         assertEquals(activity.getString(R.string.health_download),
-                ((TextView) activity.findViewById(R.id.health_action_title)).getText().toString());
-        assertTrue(activity.findViewById(R.id.health_action).isShown());
-        activity.findViewById(R.id.health_action).performClick();
+                ((TextView) activity.findViewById(R.id.save_button)).getText().toString());
+        assertTrue(activity.findViewById(R.id.save_button).isShown());
+        activity.findViewById(R.id.save_button).performClick();
         Intent download = ((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity();
         assertNotNull(download);
         assertEquals("market://details?id=com.google.android.apps.healthdata", download.getDataString());
@@ -544,7 +552,7 @@ public final class HookSettingsActivityTest {
         assertTrue(provider.isEnabled());
         assertTrue(provider.isChecked());
         assertEquals(activity.getString(R.string.health_update),
-                ((TextView) activity.findViewById(R.id.health_action_title)).getText().toString());
+                ((TextView) activity.findViewById(R.id.save_button)).getText().toString());
         assertEquals(activity.getString(R.string.standalone_hc_update_required),
                 ((TextView) activity.findViewById(R.id.health_status)).getText().toString());
         assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
@@ -651,9 +659,12 @@ public final class HookSettingsActivityTest {
     @Implements(HealthConnectSteps.class)
     public static final class AvailableHealthConnectShadow {
         static HealthConnectSteps.Availability result;
+        static HealthConnectSteps.Result permissionResult;
         static boolean deferPermission;
         static HealthConnectSteps.Callback pendingPermission;
         static HealthConnectSteps.Callback pendingSync;
+        static int permissionChecks;
+        static int syncCalls;
 
         @Implementation
         protected static HealthConnectSteps.Availability availability(Context context) {
@@ -662,15 +673,17 @@ public final class HookSettingsActivityTest {
 
         @Implementation
         protected void checkPermission(Context context, HealthConnectSteps.Callback callback) {
+            permissionChecks++;
             if (deferPermission) {
                 pendingPermission = callback;
             } else {
-                callback.onResult(HealthConnectSteps.Result.READY);
+                callback.onResult(permissionResult);
             }
         }
 
         @Implementation
         protected void sync(Context context, int count, long hour, HealthConnectSteps.Callback callback) {
+            syncCalls++;
             pendingSync = callback;
         }
     }
@@ -686,27 +699,236 @@ public final class HookSettingsActivityTest {
     }
 
     @Test
-    public void healthSettingsRowsMatchSdkStyleAndDownloadActionStillWorks() {
+    public void healthActionCardGroupsStatusPrimaryAndSettingsAndOffersDownload() {
         assertTrue(preferences.edit()
                 .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
         HookSettingsActivity activity = start(null);
-        MaterialCardView sdk = activity.findViewById(R.id.sdk_hook_card);
-        for (int id : new int[] {R.id.health_action, R.id.health_settings}) {
-            MaterialCardView row = activity.findViewById(id);
-            assertEquals(sdk.getRadius(), row.getRadius(), 0.01f);
-            assertEquals(sdk.getCardBackgroundColor().getDefaultColor(),
-                    row.getCardBackgroundColor().getDefaultColor());
-            assertTrue(row.isClickable());
-            assertTrue(row.isFocusable());
-        }
+        MaterialCardView card = activity.findViewById(R.id.step_action_card);
+        assertSame(activity.findViewById(R.id.health_status), card.findViewById(R.id.health_status));
+        assertSame(activity.findViewById(R.id.save_button), card.findViewById(R.id.save_button));
+        assertSame(activity.findViewById(R.id.health_settings), card.findViewById(R.id.health_settings));
+        assertTrue(activity.findViewById(R.id.health_action_header).isShown());
+        assertTrue(activity.findViewById(R.id.health_settings) instanceof MaterialButton);
         assertFalse(activity.findViewById(R.id.health_settings).isEnabled());
 
-        assertTrue(activity.findViewById(R.id.health_action).performClick());
+        assertTrue(activity.findViewById(R.id.save_button).performClick());
         Intent download = ((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity();
         assertNotNull(download);
         assertEquals(Intent.ACTION_VIEW, download.getAction());
         assertEquals("market://details?id=com.google.android.apps.healthdata",
                 download.getDataString());
+    }
+
+    @Test
+    @Config(sdk = 36, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void primaryActionWaitsForPermissionAndNeedsAnExplicitWriteAfterAuthorization() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
+        AvailableHealthConnectShadow.deferPermission = true;
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        ((ShadowApplication) Shadow.extract(activity.getApplication()))
+                .denyPermissions(HealthConnectSteps.writePermissions().toArray(new String[0]));
+        MaterialButton primary = activity.findViewById(R.id.save_button);
+        ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("321");
+
+        assertFalse(primary.isEnabled());
+        assertEquals(activity.getString(R.string.health_checking_action), primary.getText().toString());
+        // Programmatic clicks must not bypass the pending or busy guards either.
+        primary.performClick();
+        assertEquals(0, AvailableHealthConnectShadow.syncCalls);
+        AvailableHealthConnectShadow.pendingPermission.onResult(HealthConnectSteps.Result.PERMISSION_REQUIRED);
+        assertTrue(primary.isEnabled());
+        assertEquals(activity.getString(R.string.health_grant), primary.getText().toString());
+
+        primary.performClick();
+        AlertDialog rationale = (AlertDialog) ShadowDialog.getLatestDialog();
+        assertTrue(rationale.isShowing());
+        assertEquals(activity.getString(R.string.health_grant),
+                rationale.getButton(AlertDialog.BUTTON_POSITIVE).getText().toString());
+        assertEquals(0, AvailableHealthConnectShadow.syncCalls);
+        rationale.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+        ShadowLooper.idleMainLooper();
+        ShadowActivity.PermissionsRequest request =
+                ((ShadowActivity) Shadow.extract(activity)).getLastRequestedPermission();
+        assertNotNull(request);
+
+        AvailableHealthConnectShadow.deferPermission = false;
+        AvailableHealthConnectShadow.permissionResult = HealthConnectSteps.Result.READY;
+        assertTrue(activity.getActivityResultRegistry().dispatchResult(
+                request.requestCode, HealthConnectSteps.writePermissions()));
+        assertEquals(0, AvailableHealthConnectShadow.syncCalls);
+        assertNull(AvailableHealthConnectShadow.pendingSync);
+        assertTrue(primary.isEnabled());
+        assertEquals(activity.getString(R.string.health_sync), primary.getText().toString());
+        assertEquals("321", ((TextInputEditText) activity.findViewById(R.id.step_count_input))
+                .getText().toString());
+
+        primary.performClick();
+        assertEquals(1, AvailableHealthConnectShadow.syncCalls);
+        assertNotNull(AvailableHealthConnectShadow.pendingSync);
+        assertFalse(primary.isEnabled());
+        assertFalse(activity.findViewById(R.id.health_settings).isEnabled());
+        assertEquals(activity.getString(R.string.health_syncing), primary.getText().toString());
+        primary.performClick();
+        assertEquals(1, AvailableHealthConnectShadow.syncCalls);
+        AvailableHealthConnectShadow.pendingSync.onResult(HealthConnectSteps.Result.SYNCED);
+        assertTrue(primary.isEnabled());
+        assertEquals(activity.getString(R.string.health_sync), primary.getText().toString());
+    }
+
+    @Test
+    @Config(sdk = 36, qualifiers = "w320dp-h480dp",
+            shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void healthActionsKeepTheirFullLabelsAtNarrowWidthAndLargeFont() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
+        AvailableHealthConnectShadow.permissionResult = HealthConnectSteps.Result.PERMISSION_REQUIRED;
+        RuntimeEnvironment.setFontScale(1.5f);
+        try {
+            HookSettingsActivity activity = start(null);
+            dismissStartupReminder();
+            View root = activity.findViewById(R.id.settings_root);
+            float density = activity.getResources().getDisplayMetrics().density;
+            int width = Math.round(320 * density);
+            int height = Math.round(480 * density);
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, width, height);
+
+            for (int id : new int[]{R.id.save_button, R.id.health_settings}) {
+                MaterialButton button = activity.findViewById(id);
+                assertTrue(button.getHeight() >= Math.round(48 * density));
+                assertNotNull(button.getLayout());
+                int lines = button.getLayout().getLineCount();
+                assertTrue(lines > 0);
+                for (int line = 0; line < lines; line++) {
+                    assertEquals(0, button.getLayout().getEllipsisCount(line));
+                }
+                assertEquals(button.getText().length(), button.getLayout().getLineEnd(lines - 1));
+                assertTrue(button.getLayout().getHeight() <= button.getHeight()
+                        - button.getCompoundPaddingTop() - button.getCompoundPaddingBottom());
+            }
+        } finally {
+            RuntimeEnvironment.setFontScale(1.0f);
+        }
+    }
+
+    @Test
+    @Config(sdk = 36)
+    public void toolbarMenuStaysInsideItsSafeAreaAfterStatusInsets() {
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        View root = activity.findViewById(R.id.settings_root);
+        MaterialToolbar toolbar = activity.findViewById(R.id.toolbar);
+        float density = activity.getResources().getDisplayMetrics().density;
+        int width = Math.round(360 * density);
+        int height = Math.round(640 * density);
+        for (int top : new int[]{24, 48}) {
+            ViewCompat.dispatchApplyWindowInsets(root, new WindowInsetsCompat.Builder()
+                    .setInsets(WindowInsetsCompat.Type.systemBars(),
+                            Insets.of(0, Math.round(top * density), 0, Math.round(24 * density)))
+                    .build());
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, width, height);
+            boolean foundMenu = false;
+            for (int i = 0; i < toolbar.getChildCount(); i++) {
+                View child = toolbar.getChildAt(i);
+                if (child instanceof ActionMenuView) {
+                    foundMenu = true;
+                    assertTrue(child.getTop() >= toolbar.getPaddingTop());
+                    assertTrue(child.getBottom() <= toolbar.getHeight() - toolbar.getPaddingBottom());
+                }
+            }
+            assertTrue(foundMenu);
+        }
+    }
+
+    @Test
+    @Config(sdk = 36, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void revokedPermissionReturnsToAuthorizationAndCancellingDoesNotWrite() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        MaterialButton primary = activity.findViewById(R.id.save_button);
+        assertEquals(activity.getString(R.string.health_sync), primary.getText().toString());
+        activity.findViewById(R.id.health_settings).performClick();
+        Intent settings = ((ShadowActivity) Shadow.extract(activity)).getNextStartedActivity();
+        assertNotNull(settings);
+        assertEquals("android.health.connect.action.HEALTH_HOME_SETTINGS", settings.getAction());
+
+        AvailableHealthConnectShadow.permissionResult = HealthConnectSteps.Result.PERMISSION_REQUIRED;
+        controller.pause().resume();
+        assertEquals(activity.getString(R.string.health_grant), primary.getText().toString());
+        primary.performClick();
+        AlertDialog rationale = (AlertDialog) ShadowDialog.getLatestDialog();
+        assertTrue(rationale.isShowing());
+        rationale.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+        ShadowLooper.idleMainLooper();
+        assertEquals(0, AvailableHealthConnectShadow.syncCalls);
+        assertNull(AvailableHealthConnectShadow.pendingSync);
+        assertEquals(activity.getString(R.string.health_grant), primary.getText().toString());
+    }
+
+    @Test
+    @Config(sdk = 36, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void failedPermissionChecksOfferRetryWithoutWriting() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        MaterialButton primary = activity.findViewById(R.id.save_button);
+        for (HealthConnectSteps.Result failure : new HealthConnectSteps.Result[] {
+                HealthConnectSteps.Result.FAILED, HealthConnectSteps.Result.UNAVAILABLE}) {
+            AvailableHealthConnectShadow.permissionResult = failure;
+            controller.pause().resume();
+            assertEquals(activity.getString(R.string.health_retry), primary.getText().toString());
+            assertTrue(primary.isEnabled());
+            int previousChecks = AvailableHealthConnectShadow.permissionChecks;
+            AvailableHealthConnectShadow.deferPermission = true;
+            primary.performClick();
+            assertEquals(previousChecks + 1, AvailableHealthConnectShadow.permissionChecks);
+            assertFalse(primary.isEnabled());
+            assertEquals(0, AvailableHealthConnectShadow.syncCalls);
+            AvailableHealthConnectShadow.pendingPermission.onResult(HealthConnectSteps.Result.READY);
+            AvailableHealthConnectShadow.deferPermission = false;
+            assertTrue(primary.isEnabled());
+            assertEquals(activity.getString(R.string.health_sync), primary.getText().toString());
+        }
+        assertNull(AvailableHealthConnectShadow.pendingSync);
+    }
+
+    @Test
+    @Config(sdk = 36, shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
+    public void oldProviderPermissionReplyCannotEnableTheNewProviderOrChangeRecordingAction() {
+        assertTrue(preferences.edit()
+                .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT)
+                .putBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, true).commit());
+        AvailableHealthConnectShadow.deferPermission = true;
+        HookSettingsActivity activity = start(null);
+        dismissStartupReminder();
+        MaterialButton primary = activity.findViewById(R.id.save_button);
+        HealthConnectSteps.Callback oldReply = AvailableHealthConnectShadow.pendingPermission;
+        ((MaterialSwitch) activity.findViewById(R.id.standalone_hc_switch)).performClick();
+        HealthConnectSteps.Callback newReply = AvailableHealthConnectShadow.pendingPermission;
+        assertNotSame(oldReply, newReply);
+        assertFalse(primary.isEnabled());
+        oldReply.onResult(HealthConnectSteps.Result.READY);
+        assertFalse(primary.isEnabled());
+        assertEquals(activity.getString(R.string.health_checking_action), primary.getText().toString());
+        newReply.onResult(HealthConnectSteps.Result.PERMISSION_REQUIRED);
+        oldReply.onResult(HealthConnectSteps.Result.READY);
+        assertEquals(activity.getString(R.string.health_grant), primary.getText().toString());
+
+        ((MaterialButtonToggleGroup) activity.findViewById(R.id.step_mode_group)).check(R.id.mode_recording);
+        newReply.onResult(HealthConnectSteps.Result.READY);
+        assertEquals(activity.getString(R.string.save), primary.getText().toString());
+        assertTrue(primary.isEnabled());
+        assertEquals(View.GONE, activity.findViewById(R.id.health_action_header).getVisibility());
+        assertEquals(View.GONE, activity.findViewById(R.id.health_settings).getVisibility());
+        assertEquals(0, AvailableHealthConnectShadow.syncCalls);
     }
 
     @Test
@@ -806,6 +1028,7 @@ public final class HookSettingsActivityTest {
     }
 
     @Test
+    @Config(shadows = {ShadowAppUpdateViewModel.class, AvailableHealthConnectShadow.class})
     public void confirmationRechecksHealthHourBeforeSaving() {
         long hour = HealthConnectSteps.currentHourStartSeconds();
         assertTrue(preferences.edit()
@@ -815,8 +1038,7 @@ public final class HookSettingsActivityTest {
         HookSettingsActivity activity = start(null);
         dismissStartupReminder();
         ((TextInputEditText) activity.findViewById(R.id.step_count_input)).setText("50001");
-        // Exercise the pre-sync confirmation without a provider in the test environment.
-        activity.findViewById(R.id.save_button).setEnabled(true);
+        // Use a ready provider so the primary action reaches the pre-sync confirmation.
         activity.findViewById(R.id.save_button).performClick();
         AlertDialog warning = (AlertDialog) ShadowDialog.getLatestDialog();
         assertEquals(activity.getString(R.string.step_limit_continue),

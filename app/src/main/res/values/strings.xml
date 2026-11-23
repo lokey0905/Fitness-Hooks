@@ -25,7 +25,23 @@
     <string name="hc_probe_passed">通過</string>
     <string name="hc_probe_failed">未通過</string>
     <string name="hc_probe_unknown">無法判定</string>
+    <string name="app_check_title">App 安裝檢查</string>
+    <string name="app_check_fit" translatable="false">Google Fit</string>
+    <string name="app_check_hc" translatable="false">Health Connect</string>
+    <string name="app_check_pikmin" translatable="false">Pikmin Bloom</string>
+    <string name="app_check_refresh">重新檢查</string>
+    <string name="app_check_installed">已安裝</string>
+    <string name="app_check_not_installed">未安裝（目前使用者）</string>
+    <string name="app_check_unknown">無法判定</string>
+    <string name="app_check_explanation">檢查目前 Android 使用者的 App 安裝狀態，無須先開啟；HC 包含系統版或 App 版。</string>
+    <string name="diagnostics_expand">展開</string>
+    <string name="diagnostics_collapse">收合</string>
+    <string name="diagnostics_expanded">已展開</string>
+    <string name="diagnostics_collapsed">已收合</string>
     <string name="app_settings_title">設定</string>
+    <string name="open_hc_title">開啟 HC</string>
+    <string name="open_hc_app">App 版 Health Connect</string>
+    <string name="open_hc_system">系統版 Health Connect</string>
     <string name="app_settings_done">完成</string>
     <string name="experimental_features">啟用實驗性功能</string>
     <string name="experimental_features_summary">顯示測試中的相容選項；關閉時停止套用並保留選擇。</string>
@@ -48,9 +64,9 @@
     <string name="sdk_hook_unavailable">Android 14 以上無須啟用</string>
     <string name="sdk_hook_requires_health">請先安裝並啟用 Health Connect；目前無法使用相容模式。</string>
     <string name="standalone_hc">使用獨立版 Health Connect（實驗性）</string>
-    <string name="standalone_hc_summary">Android 14 以上改用獨立版 HC，需另行安裝、更新及授權。資料與系統版分開，不會自動轉移。切換後請強制停止並重新開啟 Pikmin。此功能仍在測試中。</string>
+    <string name="standalone_hc_summary">Android 14 以上改用獨立 HC，請在同一使用者安裝 HC App，並於 LSPosed 另勾選 Health Connect 與 Google Fit。需完成 HC 的使用情況存取及各 App 授權；資料不會從系統版自動轉移。切換後請重開 HC、Google Fit 與 Pikmin。</string>
     <string name="standalone_hc_older_android">Android 13 以下原本就使用獨立版 Health Connect，不需要此開關。</string>
-    <string name="standalone_hc_restart">設定已儲存；請強制停止並重新開啟 Pikmin，讓 Health Connect 背景工作重新初始化。</string>
+    <string name="standalone_hc_restart">設定已儲存；請確認 LSPosed 已勾選 Health Connect 與 Google Fit，再強制停止並重新開啟 HC、Google Fit 與 Pikmin。首次使用此模式，請在 Fit 重新啟用 HC 同步並完成授權。</string>
     <string name="standalone_hc_missing">已選用獨立版 Health Connect，請先安裝並啟用 APK，再完成授權。目前不會改用系統版。</string>
     <string name="standalone_hc_update_required">請更新或啟用獨立版 Health Connect，再重新授權。目前不會改用系統版。</string>
     <string name="standalone_hc_unavailable">獨立版 Health Connect 在目前環境無法使用，請確認 APK 是否可正常開啟及授權。目前不會改用系統版。</string>
@@ -66,15 +82,16 @@
     <string name="health_hour_format">時段：%1$s（%2$s，裝置當地時間）</string>
     <string name="health_hour_changed">已進入新的小時，請重新確認步數後再同步。</string>
     <string name="health_checking">正在檢查 Health Connect…</string>
-    <string name="health_ready">Health Connect 已就緒，可同步手動步數。</string>
+    <string name="health_ready">已授權寫入，可送出目前小時的手動步數。</string>
     <string name="health_permission_required">尚未授權寫入步數。</string>
     <string name="health_permission_denied">尚未取得寫入權限。可重新授權，或到 Health Connect 設定管理權限。</string>
-    <string name="health_permission_granted">已取得寫入權限，請按「同步步數」送出。</string>
+    <string name="health_permission_granted">已取得寫入權限，請按「寫入步數」送出。</string>
+    <string name="health_actions_title">Health Connect</string>
+    <string name="health_checking_action">檢查權限中…</string>
+    <string name="health_retry">重新檢查</string>
+    <string name="health_check_failed">無法確認寫入權限，請重試或開啟 Health Connect 設定。</string>
     <string name="health_grant">授權寫入步數</string>
-    <string name="health_grant_summary">管理本 App 的步數寫入權限</string>
     <string name="health_settings">開啟 Health Connect 設定</string>
-    <string name="health_settings_summary">管理已連結 App、資料與權限</string>
-    <string name="health_download_summary">前往 Google Play 安裝或更新</string>
     <string name="health_download">下載 Health Connect</string>
     <string name="health_update">更新 Health Connect</string>
     <string name="health_missing">Android 13 以下需先安裝並啟用 Health Connect。目前已停用 SDK 相容模式；請完成安裝與授權後再選用目標 App 的 Health Connect 模式。</string>
@@ -84,7 +101,7 @@
     <string name="health_unavailable">此裝置或使用者環境無法使用 Health Connect；安裝獨立 APK 不一定能解決系統服務限制。</string>
     <string name="health_failed">Health Connect 操作失敗，請確認服務狀態後重試。</string>
     <string name="health_no_handler">找不到可開啟此頁面的 App。</string>
-    <string name="health_sync">同步步數</string>
+    <string name="health_sync">寫入步數</string>
     <string name="health_syncing">正在同步…</string>
     <string name="health_synced">目前小時的手動步數已寫入 Health Connect。</string>
     <string name="health_previous_hour_synced">上一時段的同步已完成。已進入新的小時，請重新確認步數。</string>

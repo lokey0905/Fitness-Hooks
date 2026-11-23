@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Build;
@@ -13,13 +14,16 @@ import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.GridLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.view.ViewCompat;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.appbar.MaterialToolbar;
@@ -79,6 +83,10 @@ public final class HookSettingsActivity extends ComponentActivity {
     private boolean startupReminderPending;
     private int statusGeneration;
     private HealthConnectSteps.Availability availability;
+    private HealthConnectSteps.Result healthPermission;
+    private boolean compatibilityExpansionChosen;
+    private boolean appExpansionChosen;
+    private enum CheckState { PASSED, FAILED, UNKNOWN }
     private final Runnable hourCheck = new Runnable() {
         @Override
         public void run() {
@@ -97,13 +105,20 @@ public final class HookSettingsActivity extends ComponentActivity {
             DynamicColors.applyToActivityIfAvailable(this);
         }
         super.onCreate(savedInstanceState);
+        SystemBarInsets.enable(this);
         setContentView(R.layout.activity_hook_settings);
+        SystemBarInsets.apply(findViewById(R.id.settings_root), findViewById(R.id.toolbar),
+                findViewById(R.id.settings_scroll));
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         toolbar.setTitle(
                 getString(R.string.settings_title_version, BuildConfig.VERSION_NAME)
         );
         toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_open_hc) {
+                openHealthConnect();
+                return true;
+            }
             if (item.getItemId() == R.id.action_settings) {
                 showAppSettingsDialog();
                 return true;
@@ -124,6 +139,17 @@ public final class HookSettingsActivity extends ComponentActivity {
         modeGroup = findViewById(R.id.step_mode_group);
         saveButton = findViewById(R.id.save_button);
         healthStatus = findViewById(R.id.health_status);
+        compatibilityExpansionChosen = savedInstanceState != null
+                && savedInstanceState.getBoolean("compatibility_expansion_chosen", false);
+        appExpansionChosen = savedInstanceState != null
+                && savedInstanceState.getBoolean("app_expansion_chosen", false);
+        bindDiagnosticsSection(R.id.compatibility_check_header, R.id.compatibility_check_details,
+                R.id.compatibility_check_arrow, savedInstanceState != null
+                        && savedInstanceState.getBoolean("compatibility_expanded", false));
+        bindDiagnosticsSection(R.id.app_check_header, R.id.app_check_details,
+                R.id.app_check_arrow, savedInstanceState != null
+                        && savedInstanceState.getBoolean("app_checks_expanded", false));
+        findViewById(R.id.app_check_refresh).setOnClickListener(view -> refreshAppChecks());
         permissionLauncher = registerForActivityResult(
                 HealthConnectSteps.permissionContract(), granted -> {
                     refreshEnvironment();
@@ -143,8 +169,7 @@ public final class HookSettingsActivity extends ComponentActivity {
         sdkHookSwitch.setOnCheckedChangeListener((button, checked) -> saveSdkHookChoice(checked));
         standaloneHcSwitch.setOnCheckedChangeListener(
                 (button, checked) -> saveStandaloneHcChoice(checked));
-        saveButton.setOnClickListener(view -> saveSettings(false));
-        findViewById(R.id.health_action).setOnClickListener(view -> healthAction());
+        saveButton.setOnClickListener(view -> primaryAction());
         findViewById(R.id.health_settings).setOnClickListener(
                 view -> openExternal(HealthConnectSteps.settingsIntent(this))
         );
@@ -177,6 +202,25 @@ public final class HookSettingsActivity extends ComponentActivity {
             });
         }
         updates.checkOnce();
+    }
+
+    private void openHealthConnect() {
+        Intent systemSettings = new Intent("android.health.connect.action.HEALTH_HOME_SETTINGS");
+        try {
+            getPackageManager().getApplicationInfo(StandaloneHealthConnect.PROVIDER_PACKAGE, 0);
+        } catch (PackageManager.NameNotFoundException missing) {
+            openExternal(systemSettings);
+            return;
+        }
+        showSettingsDialog(new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.open_hc_title)
+                .setItems(new CharSequence[]{getString(R.string.open_hc_app),
+                        getString(R.string.open_hc_system)}, (dialog, which) ->
+                        openExternal(which == 0
+                                ? new Intent(StandaloneHealthConnect.SETTINGS_ACTION)
+                                        .setPackage(StandaloneHealthConnect.PROVIDER_PACKAGE)
+                                : systemSettings))
+                .setNegativeButton(android.R.string.cancel, null));
     }
 
     private void showAboutDialog() {
@@ -325,6 +369,7 @@ public final class HookSettingsActivity extends ComponentActivity {
         refreshEnvironment();
         handler.post(hourCheck);
         resumed = true;
+        refreshAppChecks();
         updates.setListener(this::maybeShowUpdate);
         maybeShowUpdate();
     }
@@ -363,6 +408,12 @@ public final class HookSettingsActivity extends ComponentActivity {
         outState.putString("health_draft", healthDraft);
         outState.putLong("health_hour", healthHour);
         outState.putBoolean("sync_pending", busy || restoringSync);
+        outState.putBoolean("compatibility_expanded",
+                findViewById(R.id.compatibility_check_details).getVisibility() == View.VISIBLE);
+        outState.putBoolean("app_checks_expanded",
+                findViewById(R.id.app_check_details).getVisibility() == View.VISIBLE);
+        outState.putBoolean("compatibility_expansion_chosen", compatibilityExpansionChosen);
+        outState.putBoolean("app_expansion_chosen", appExpansionChosen);
         super.onSaveInstanceState(outState);
     }
 
@@ -480,6 +531,7 @@ public final class HookSettingsActivity extends ComponentActivity {
                 : R.string.standalone_hc_summary);
         ConfigTransport.publishToTarget(this, snapshot);
         refreshCompatibilityChecks();
+        if (!busy) healthPermission = null;
         updateModeViews();
         int generation = ++statusGeneration;
         if (!healthMode() || busy) {
@@ -496,14 +548,12 @@ public final class HookSettingsActivity extends ComponentActivity {
             if (generation != statusGeneration || !healthMode() || busy) {
                 return;
             }
+            healthPermission = result;
             restoreSyncTotal();
             updateModeViews();
             healthStatus.setText(result == HealthConnectSteps.Result.READY ? R.string.health_ready
                     : result == HealthConnectSteps.Result.PERMISSION_REQUIRED
-                    ? R.string.health_permission_required : R.string.health_failed);
-            findViewById(R.id.health_action).setVisibility(
-                    result == HealthConnectSteps.Result.READY ? View.GONE : View.VISIBLE
-            );
+                    ? R.string.health_permission_required : R.string.health_check_failed);
         });
     }
 
@@ -620,13 +670,21 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     private void refreshCompatibilityChecks() {
         PikminHealthConnectProbe probe = new PikminHealthConnectProbe(this);
-        setCompatibilityResult(R.id.hc_is_supported_icon, R.id.hc_is_supported_result,
+        Boolean supported = setCompatibilityResult(R.id.hc_is_supported_icon, R.id.hc_is_supported_result,
                 probe::isSupported);
-        setCompatibilityResult(R.id.hc_os_supports_icon, R.id.hc_os_supports_result,
+        Boolean osSupported = setCompatibilityResult(R.id.hc_os_supports_icon, R.id.hc_os_supports_result,
                 probe::osSupportsHealthConnect);
+        CheckState summary = Boolean.FALSE.equals(supported) || Boolean.FALSE.equals(osSupported)
+                ? CheckState.FAILED : supported == null || osSupported == null
+                ? CheckState.UNKNOWN : CheckState.PASSED;
+        setDiagnosticsSummary(R.id.compatibility_check_summary, summary);
+        if (!compatibilityExpansionChosen) {
+            setDiagnosticsExpanded(R.id.compatibility_check_header, R.id.compatibility_check_details,
+                    R.id.compatibility_check_arrow, summary == CheckState.FAILED);
+        }
     }
 
-    private void setCompatibilityResult(int iconId, int resultId, BooleanSupplier check) {
+    private Boolean setCompatibilityResult(int iconId, int resultId, BooleanSupplier check) {
         Boolean passed;
         try {
             passed = check.getAsBoolean();
@@ -645,6 +703,88 @@ public final class HookSettingsActivity extends ComponentActivity {
         resultView.setText(passed == null ? R.string.hc_probe_unknown
                 : passed ? R.string.hc_probe_passed : R.string.hc_probe_failed);
         resultView.setTextColor(statusColor);
+        return passed;
+    }
+
+    private void bindDiagnosticsSection(int headerId, int detailsId, int arrowId, boolean expanded) {
+        View header = findViewById(headerId);
+        setDiagnosticsExpanded(headerId, detailsId, arrowId, expanded);
+        header.setOnClickListener(view -> {
+            if (headerId == R.id.compatibility_check_header) {
+                compatibilityExpansionChosen = true;
+            } else {
+                appExpansionChosen = true;
+            }
+            setDiagnosticsExpanded(headerId, detailsId, arrowId,
+                    findViewById(detailsId).getVisibility() != View.VISIBLE);
+        });
+    }
+
+    private void setDiagnosticsExpanded(int headerId, int detailsId, int arrowId, boolean expanded) {
+        findViewById(detailsId).setVisibility(expanded ? View.VISIBLE : View.GONE);
+        findViewById(arrowId).setRotation(expanded ? 180f : 0f);
+        View header = findViewById(headerId);
+        ViewCompat.setStateDescription(header, getString(expanded
+                ? R.string.diagnostics_expanded : R.string.diagnostics_collapsed));
+        header.setTooltipText(getString(expanded
+                ? R.string.diagnostics_collapse : R.string.diagnostics_expand));
+    }
+
+    private void refreshAppChecks() {
+        if (!resumed || destroying || isFinishing()) return;
+        String[] packages = {ConfigTransport.FIT_PACKAGE, ConfigTransport.HC_PACKAGE,
+                ConfigTransport.TARGET_PACKAGE};
+        boolean missing = false;
+        for (String packageName : packages) {
+            AppInstallation.State state = AppInstallation.check(this, packageName);
+            if (state == AppInstallation.State.NOT_INSTALLED) missing = true;
+            setInstallationResult(packageName, state);
+        }
+        if (!appExpansionChosen) {
+            setDiagnosticsExpanded(R.id.app_check_header, R.id.app_check_details,
+                    R.id.app_check_arrow, missing);
+        }
+    }
+
+    private void setDiagnosticsSummary(int id, CheckState state) {
+        TextView summary = findViewById(id);
+        summary.setText(state == CheckState.PASSED ? R.string.hc_probe_passed
+                : state == CheckState.FAILED ? R.string.hc_probe_failed : R.string.hc_probe_unknown);
+        summary.setTextColor(MaterialColors.getColor(summary, diagnosticColor(state)));
+    }
+
+    private int diagnosticColor(CheckState state) {
+        return state == CheckState.PASSED ? androidx.appcompat.R.attr.colorPrimary
+                : state == CheckState.FAILED ? androidx.appcompat.R.attr.colorError
+                : com.google.android.material.R.attr.colorTertiary;
+    }
+
+    private void setInstallationResult(String packageName, AppInstallation.State state) {
+        int iconId;
+        int resultId;
+        if (ConfigTransport.FIT_PACKAGE.equals(packageName)) {
+            iconId = R.id.app_fit_icon;
+            resultId = R.id.app_fit_result;
+        } else if (ConfigTransport.HC_PACKAGE.equals(packageName)) {
+            iconId = R.id.app_hc_icon;
+            resultId = R.id.app_hc_result;
+        } else {
+            iconId = R.id.app_pikmin_icon;
+            resultId = R.id.app_pikmin_result;
+        }
+        TextView icon = findViewById(iconId);
+        TextView result = findViewById(resultId);
+        CheckState status = state == AppInstallation.State.INSTALLED ? CheckState.PASSED
+                : state == AppInstallation.State.NOT_INSTALLED ? CheckState.FAILED : CheckState.UNKNOWN;
+        int color = MaterialColors.getColor(icon, diagnosticColor(status));
+        icon.setText(status == CheckState.PASSED ? R.string.device_info_icon_passed
+                : status == CheckState.FAILED ? R.string.device_info_icon_failed
+                : R.string.device_info_icon_unknown);
+        icon.setTextColor(color);
+        result.setText(state == AppInstallation.State.INSTALLED ? R.string.app_check_installed
+                : state == AppInstallation.State.NOT_INSTALLED ? R.string.app_check_not_installed
+                : R.string.app_check_unknown);
+        result.setTextColor(color);
     }
 
     private void restoreSyncTotal() {
@@ -664,10 +804,13 @@ public final class HookSettingsActivity extends ComponentActivity {
 
     private void updateModeViews() {
         boolean health = healthMode();
+        positionActionCard(health);
         findViewById(R.id.health_controls).setVisibility(health ? View.VISIBLE : View.GONE);
         findViewById(R.id.recording_controls).setVisibility(health ? View.GONE : View.VISIBLE);
         findViewById(R.id.health_hour).setVisibility(health ? View.VISIBLE : View.GONE);
         findViewById(R.id.health_step_explanation).setVisibility(health ? View.VISIBLE : View.GONE);
+        findViewById(R.id.health_action_header).setVisibility(health ? View.VISIBLE : View.GONE);
+        findViewById(R.id.health_settings).setVisibility(health ? View.VISIBLE : View.GONE);
         findViewById(R.id.standalone_hc_card).setVisibility(
                 experimentalFeaturesEnabled() ? View.VISIBLE : View.GONE);
         findViewById(R.id.module_status_card).setVisibility(
@@ -689,23 +832,40 @@ public final class HookSettingsActivity extends ComponentActivity {
         boolean available = availability == HealthConnectSteps.Availability.AVAILABLE;
         setStepControlsEnabled(!working && (health ? available : stepHookSwitch.isChecked()));
         stepCountLayout.setHint(getString(health ? R.string.health_step_count : R.string.step_count));
-        saveButton.setText(working ? R.string.health_syncing : health ? R.string.health_sync : R.string.save);
-        saveButton.setEnabled(!working && (!health || available));
-        View action = findViewById(R.id.health_action);
-        int actionTitle = availability == HealthConnectSteps.Availability.INSTALL_REQUIRED
-                ? R.string.health_download : availability == HealthConnectSteps.Availability.UPDATE_REQUIRED
-                ? R.string.health_update : R.string.health_grant;
-        int actionSummary = downloadAvailable()
-                ? R.string.health_download_summary : R.string.health_grant_summary;
-        ((TextView) findViewById(R.id.health_action_title)).setText(actionTitle);
-        ((TextView) findViewById(R.id.health_action_summary)).setText(actionSummary);
-        action.setContentDescription(getString(actionTitle) + ", " + getString(actionSummary));
-        action.setVisibility(available || downloadAvailable() ? View.VISIBLE : View.GONE);
-        action.setEnabled(!working);
-        action.setAlpha(working ? 0.55f : 1.0f);
+        int actionTitle = R.string.save;
+        if (health) {
+            if (working) {
+                actionTitle = R.string.health_syncing;
+            } else if (downloadAvailable()) {
+                actionTitle = availability == HealthConnectSteps.Availability.INSTALL_REQUIRED
+                        ? R.string.health_download : R.string.health_update;
+            } else if (!available) {
+                actionTitle = R.string.health_sync;
+            } else if (healthPermission == null) {
+                actionTitle = R.string.health_checking_action;
+            } else if (healthPermission == HealthConnectSteps.Result.PERMISSION_REQUIRED) {
+                actionTitle = R.string.health_grant;
+            } else {
+                actionTitle = healthPermission == HealthConnectSteps.Result.READY
+                        ? R.string.health_sync : R.string.health_retry;
+            }
+        }
+        saveButton.setText(actionTitle);
+        saveButton.setEnabled(!working && (!health || downloadAvailable()
+                || (available && healthPermission != null)));
         View settings = findViewById(R.id.health_settings);
         settings.setEnabled(!working && available);
-        settings.setAlpha(!working && available ? 1.0f : 0.55f);
+    }
+
+    private void positionActionCard(boolean health) {
+        View card = findViewById(R.id.step_action_card);
+        LinearLayout parent = findViewById(health ? R.id.health_controls : R.id.settings_content);
+        if (card.getParent() == parent) return;
+        ((ViewGroup) card.getParent()).removeView(card);
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) card.getLayoutParams();
+        params.topMargin = health ? 0 : dp(24);
+        params.bottomMargin = health ? dp(12) : 0;
+        parent.addView(card, params);
     }
 
     private boolean downloadAvailable() {
@@ -752,6 +912,21 @@ public final class HookSettingsActivity extends ComponentActivity {
             refreshEnvironment();
             showModeReminder();
         }
+    }
+
+    private void primaryAction() {
+        if (busy || restoringSync) return;
+        if (healthMode() && (availability != HealthConnectSteps.Availability.AVAILABLE
+                || healthPermission != HealthConnectSteps.Result.READY)) {
+            if (downloadAvailable() || (availability == HealthConnectSteps.Availability.AVAILABLE
+                    && healthPermission == HealthConnectSteps.Result.PERMISSION_REQUIRED)) {
+                healthAction();
+            } else if (healthPermission != null) {
+                refreshEnvironment();
+            }
+            return;
+        }
+        saveSettings(false);
     }
 
     private void openDownload() {
@@ -860,16 +1035,17 @@ public final class HookSettingsActivity extends ComponentActivity {
         healthStatus.setText(R.string.health_syncing);
         healthConnect.sync(this, stepCount, writtenHour, result -> {
             busy = false;
-            updateModeViews();
             switch (result) {
                 case SYNCED:
                 case CLEARED:
+                    healthPermission = HealthConnectSteps.Result.READY;
                     refreshHour();
                     healthStatus.setText(healthHour != writtenHour ? R.string.health_previous_hour_synced
                             : result == HealthConnectSteps.Result.SYNCED
                                     ? R.string.health_synced : R.string.health_cleared);
                     break;
                 case PERMISSION_REQUIRED:
+                    healthPermission = HealthConnectSteps.Result.PERMISSION_REQUIRED;
                     healthStatus.setText(R.string.health_permission_required);
                     healthAction();
                     break;
@@ -885,6 +1061,7 @@ public final class HookSettingsActivity extends ComponentActivity {
                     healthStatus.setText(R.string.health_failed);
                     break;
             }
+            updateModeViews();
             maybeShowUpdate();
         });
     }

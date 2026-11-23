@@ -13,7 +13,10 @@ public final class HealthPermissionsActivity extends Activity {
             DynamicColors.applyToActivityIfAvailable(this);
         }
         super.onCreate(savedInstanceState);
+        SystemBarInsets.enable(this);
         setContentView(R.layout.activity_health_permissions);
+        SystemBarInsets.apply(findViewById(R.id.health_permissions_root), null,
+                findViewById(R.id.health_permissions_scroll));
         findViewById(R.id.close_privacy).setOnClickListener(view -> finish());
     }
 }
