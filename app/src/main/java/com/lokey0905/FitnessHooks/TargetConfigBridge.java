@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 
 import androidx.core.content.ContextCompat;
 
@@ -17,7 +18,10 @@ import de.robv.android.xposed.XposedBridge;
 
 final class TargetConfigBridge {
     private static final AtomicBoolean REGISTERED = new AtomicBoolean(false);
+    private static final Object ROUTE_LOCK = new Object();
     private static volatile Context applicationContext;
+    private static volatile Boolean standaloneRouteSelection;
+    private static long configGeneration;
 
     private TargetConfigBridge() {
     }
@@ -47,18 +51,70 @@ final class TargetConfigBridge {
         return applicationContext;
     }
 
+    static boolean isStandaloneProviderEnabled() {
+        return isStandaloneRouteEnabled();
+    }
+
+    static boolean isStandaloneRouteEnabled() {
+        return Boolean.TRUE.equals(standaloneRouteSelection);
+    }
+
+    static boolean isStandaloneRouteInitialized() {
+        return standaloneRouteSelection != null;
+    }
+
+    static Boolean getStandaloneRouteSelection() {
+        return standaloneRouteSelection;
+    }
+
+    private static void applyBootstrapRoute(Boolean selected, long generation, String label) {
+        if (selected == null) return;
+        synchronized (ROUTE_LOCK) {
+            if (configGeneration != generation) return;
+            standaloneRouteSelection = Build.VERSION.SDK_INT >= 34 && selected;
+            configGeneration++;
+            FitnessHooksEntry.log(label + " startup config verified; standaloneHc="
+                    + standaloneRouteSelection);
+        }
+    }
+
+    private static void applyBroadcastRoute(Boolean selected, String label) {
+        if (selected == null) return;
+        synchronized (ROUTE_LOCK) {
+            configGeneration++;
+            standaloneRouteSelection = Build.VERSION.SDK_INT >= 34 && selected;
+            FitnessHooksEntry.log(label + " provider config received; standaloneHc="
+                    + standaloneRouteSelection);
+        }
+    }
+
     private static void initialize(Context context) {
+        String packageName = context.getPackageName();
+        boolean providerProcess = ConfigTransport.HC_PACKAGE.equals(packageName);
+        boolean routeOnlyProcess = providerProcess || ConfigTransport.FIT_PACKAGE.equals(packageName);
+        String routeLabel = providerProcess ? "HC" : "Fit HC";
+        if (!routeOnlyProcess && !ConfigTransport.TARGET_PACKAGE.equals(packageName)) {
+            return;
+        }
         Context appContext = context.getApplicationContext();
         applicationContext = appContext != null ? appContext : context;
         if (!REGISTERED.compareAndSet(false, true)) {
             return;
         }
 
+        boolean receiverRegistered = false;
         try {
             BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context receiverContext, Intent intent) {
                     if (!ConfigTransport.ACTION_APPLY_CONFIG.equals(intent.getAction())) {
+                        return;
+                    }
+                    if (routeOnlyProcess) {
+                        // This receiver requires the module's signature permission.
+                        // Live state does not depend on a stale or unwritable preference file.
+                        applyBroadcastRoute(StandaloneConfigBootstrap.parseRoute(intent.getExtras()),
+                                routeLabel);
                         return;
                     }
                     boolean saved = ConfigTransport.storeTargetSettings(
@@ -84,10 +140,27 @@ final class TargetConfigBridge {
                     null,
                     ContextCompat.RECEIVER_EXPORTED
             );
+            receiverRegistered = true;
+            if (routeOnlyProcess) {
+                final long generation;
+                synchronized (ROUTE_LOCK) {
+                    generation = configGeneration;
+                }
+                Boolean selected = Build.VERSION.SDK_INT >= 34
+                        ? StandaloneConfigBootstrap.read(applicationContext,
+                                late -> applyBootstrapRoute(late, generation, routeLabel))
+                        : Boolean.FALSE;
+                applyBootstrapRoute(selected, generation, routeLabel);
+                if (getStandaloneRouteSelection() == null) {
+                    FitnessHooksEntry.log(routeLabel + " startup config pending; provider not selected");
+                }
+            }
             requestCurrentConfig();
             FitnessHooksEntry.log("target config receiver registered");
         } catch (Throwable throwable) {
-            REGISTERED.set(false);
+            // A registration/request failure is not evidence that the user selected system HC.
+            // Keep a registered receiver alive so a later signed configuration can resolve it.
+            if (!receiverRegistered) REGISTERED.set(false);
             FitnessHooksEntry.log("target config receiver failed: " + throwable);
             XposedBridge.log(throwable);
         }

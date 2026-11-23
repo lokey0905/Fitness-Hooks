@@ -8,6 +8,8 @@ import android.os.Build;
 final class ConfigTransport {
     static final String MODULE_PACKAGE = "com.lokey0905.FitnessHooks";
     static final String TARGET_PACKAGE = "com.nianticlabs.pikmin";
+    static final String HC_PACKAGE = "com.google.android.apps.healthdata";
+    static final String FIT_PACKAGE = "com.google.android.apps.fitness";
     static final String CONFIG_PERMISSION = MODULE_PACKAGE + ".permission.CONFIGURE";
     static final String ACTION_APPLY_CONFIG = MODULE_PACKAGE + ".action.APPLY_CONFIG";
     static final String ACTION_REQUEST_CONFIG = MODULE_PACKAGE + ".action.REQUEST_CONFIG";
@@ -68,6 +70,15 @@ final class ConfigTransport {
     }
 
     static void publishToTarget(Context context, HookConfig.Snapshot snapshot) {
+        // HC and Fit only need the provider choice; do not expose manual step values.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            for (String packageName : new String[]{HC_PACKAGE, FIT_PACKAGE}) {
+                context.sendBroadcast(new Intent(ACTION_APPLY_CONFIG)
+                        .setPackage(packageName)
+                        .putExtra(HookConfig.KEY_STANDALONE_HC_ENABLED,
+                                snapshot.standaloneHcEnabled));
+            }
+        }
         Intent intent = new Intent(ACTION_APPLY_CONFIG)
                 .setPackage(TARGET_PACKAGE)
                 .putExtra(HookConfig.KEY_SDK_HOOK_ENABLED, snapshot.sdkHookEnabled)

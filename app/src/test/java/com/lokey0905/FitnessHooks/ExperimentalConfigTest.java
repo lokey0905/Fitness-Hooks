@@ -10,6 +10,9 @@ import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.SharedPreferences;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -168,7 +171,7 @@ public final class ExperimentalConfigTest {
         BroadcastContext recordingContext = new BroadcastContext(context);
 
         ConfigTransport.publishToTarget(recordingContext, ConfigTransport.readModuleSettings(context));
-        Intent enabled = recordingContext.lastBroadcast;
+        Intent enabled = recordingContext.forPackage(ConfigTransport.TARGET_PACKAGE);
         assertNotNull(enabled);
         assertEquals(ConfigTransport.ACTION_APPLY_CONFIG, enabled.getAction());
         assertEquals(ConfigTransport.TARGET_PACKAGE, enabled.getPackage());
@@ -179,16 +182,38 @@ public final class ExperimentalConfigTest {
         assertFalse(enabled.hasExtra(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED));
         assertFalse(enabled.hasExtra(HookConfig.KEY_DISABLE_DYNAMIC_COLORS));
         assertFalse(enabled.hasExtra("u_extension_hook_enabled"));
+        assertEquals(3, recordingContext.broadcasts.size());
+        for (String packageName : new String[]{ConfigTransport.HC_PACKAGE, ConfigTransport.FIT_PACKAGE}) {
+            Intent route = recordingContext.forPackage(packageName);
+            assertEquals(ConfigTransport.ACTION_APPLY_CONFIG, route.getAction());
+            assertEquals(1, route.getExtras().size());
+            assertTrue(route.getBooleanExtra(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        }
 
         assertTrue(preferences.edit()
                 .putBoolean(HookConfig.KEY_EXPERIMENTAL_FEATURES_ENABLED, false)
                 .putString(HookConfig.KEY_STEP_MODE, HookConfig.MODE_HEALTH_CONNECT).commit());
+        recordingContext.broadcasts.clear();
         ConfigTransport.publishToTarget(recordingContext, ConfigTransport.readModuleSettings(context));
-        Intent disabled = recordingContext.lastBroadcast;
+        Intent disabled = recordingContext.forPackage(ConfigTransport.TARGET_PACKAGE);
         assertFalse(disabled.getBooleanExtra(HookConfig.KEY_STANDALONE_HC_ENABLED, true));
         assertFalse(disabled.getBooleanExtra(HookConfig.KEY_STEP_HOOK_ENABLED, true));
         assertEquals(6789, disabled.getIntExtra(HookConfig.KEY_STEP_COUNT, -1));
         assertTrue(preferences.getBoolean(HookConfig.KEY_STANDALONE_HC_ENABLED, false));
+        for (String packageName : new String[]{ConfigTransport.HC_PACKAGE, ConfigTransport.FIT_PACKAGE}) {
+            assertFalse(recordingContext.forPackage(packageName)
+                    .getBooleanExtra(HookConfig.KEY_STANDALONE_HC_ENABLED, true));
+        }
+    }
+
+    @Test
+    @Config(sdk = 33)
+    public void android13DoesNotSendProviderCompatibilityConfiguration() {
+        enableExperimentalChoice();
+        BroadcastContext recordingContext = new BroadcastContext(context);
+        ConfigTransport.publishToTarget(recordingContext, ConfigTransport.readModuleSettings(context));
+        assertEquals(1, recordingContext.broadcasts.size());
+        assertEquals(ConfigTransport.TARGET_PACKAGE, recordingContext.broadcasts.get(0).getPackage());
     }
 
     private void enableExperimentalChoice() {
@@ -198,7 +223,7 @@ public final class ExperimentalConfigTest {
     }
 
     private static final class BroadcastContext extends ContextWrapper {
-        Intent lastBroadcast;
+        final List<Intent> broadcasts = new ArrayList<>();
 
         BroadcastContext(Context base) {
             super(base);
@@ -206,7 +231,12 @@ public final class ExperimentalConfigTest {
 
         @Override
         public void sendBroadcast(Intent intent) {
-            lastBroadcast = intent;
+            broadcasts.add(intent);
+        }
+
+        Intent forPackage(String packageName) {
+            return broadcasts.stream().filter(intent -> packageName.equals(intent.getPackage()))
+                    .findFirst().orElseThrow(AssertionError::new);
         }
     }
 

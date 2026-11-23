@@ -1,5 +1,7 @@
 package com.lokey0905.FitnessHooks;
 
+import android.os.Build;
+
 import java.lang.reflect.Method;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -18,6 +20,27 @@ public final class FitnessHooksEntry implements IXposedHookLoadPackage {
             installActivationIndicator(loadPackageParam.classLoader);
             int selfSdkHooks = SdkGateHook.installSelf(loadPackageParam.classLoader);
             log("module loaded; selfSdkHooks=" + selfSdkHooks);
+            return;
+        }
+
+        if (ConfigTransport.FIT_PACKAGE.equals(loadPackageParam.packageName)) {
+            int bridgeHooks = Build.VERSION.SDK_INT >= 34 ? TargetConfigBridge.install() : 0;
+            int syncStateHooks = GoogleFitSyncStateHook.install(loadPackageParam.classLoader);
+            int clientHooks = GoogleFitHealthConnectHook.install(loadPackageParam.classLoader);
+            if (bridgeHooks == 1 && syncStateHooks == 2 && clientHooks == 5) {
+                GoogleFitRoute.markHooksReady();
+            }
+            log("Google Fit loaded; configBridgeHooks=" + bridgeHooks
+                    + "; syncStateHooks=" + syncStateHooks + "; clientHooks=" + clientHooks);
+            return;
+        }
+
+        if (ConfigTransport.HC_PACKAGE.equals(loadPackageParam.packageName)) {
+            int configBridgeHooks = Build.VERSION.SDK_INT >= 34
+                    ? TargetConfigBridge.install() : 0;
+            int providerHooks = StandaloneProviderHook.install(loadPackageParam.classLoader);
+            log("HC provider loaded; configBridgeHooks=" + configBridgeHooks
+                    + "; providerHooks=" + providerHooks);
             return;
         }
 

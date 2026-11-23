@@ -13,6 +13,7 @@
     <queries>
         <package android:name="com.nianticlabs.pikmin" />
         <package android:name="com.google.android.apps.healthdata" />
+        <package android:name="com.google.android.apps.fitness" />
     </queries>
 
     <application
@@ -59,6 +60,14 @@
             android:name=".ConfigRequestReceiver"
             android:exported="true"
             tools:ignore="ExportedReceiver" />
+
+        <!-- call() checks the HC/Fit caller UID and Android user. No writes or health data. -->
+        <provider
+            android:name=".StandaloneConfigProvider"
+            android:authorities="com.lokey0905.FitnessHooks.standalone_config"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            tools:ignore="ExportedContentProvider" />
 
         <meta-data
             android:name="xposedmodule"
